@@ -16,7 +16,7 @@ The following packages must also be installed:
 
 
 
-# Organization
+# File Tree
 
 In the *src/* folder, the separate files are organized as follows:
 
@@ -26,3 +26,4 @@ In the *src/* folder, the separate files are organized as follows:
 - tds_analysis.py - All functions needed for time-domain spectroscopy, from determining the amplitude and phase of the transmission coefficiet, to numerically find the complex refractive index.
 - basic_plots.py - Basic functions to do quick standard plots.
 
+The *tutorials/* folder contain Jupyter notebooks with all the essential steps for analyzing TDS data. TRTS is coming soon...
