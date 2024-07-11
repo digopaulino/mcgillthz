@@ -176,7 +176,7 @@ def get_total_err(n_tils, freqs, T_function, T_function_pars, exp_freqs, exp_amp
 
 def get_R2(n_tils, freqs, T_function, T_function_pars, exp_freqs, exp_amps, exp_phases):
     """
-    Calculate the R2 paremeter for the fitted complex refractive indices over a range of frequencies.
+    Calculate the R2 parameter for the fitted complex refractive indices over a range of frequencies.
 
     Parameters:
     n_tils (ndarray): Best-fit complex refractive indices.

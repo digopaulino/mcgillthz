@@ -111,6 +111,19 @@ def plot_spectrum(data, fft, axs=None, color='black', label=None, normalize=1, l
 
 
 def plot_n_til(freqs, n_tils, ax=None, absorb=False):
+    """
+    Plots the refractive index (n) and the absorption coefficient (alpha) if absorb=True,
+    otherwise plots the refractive index (n) and the extinction coefficient (kappa).
+
+    Parameters:
+    freqs (ndarray): Array of frequencies.
+    n_tils (ndarray): Array of complex refractive index values.
+    ax (matplotlib.axes.Axes): Axes to plot on. If None, a new axes is created.
+    absorb (bool): If True, plots the absorption coefficient. Otherwise plots the extinction coefficient.
+
+    Returns:
+    matplotlib.axes.Axes: Axes used for the plot.
+    """
     if ax is None:
         fig, ax = plt.subplots()
     
@@ -143,7 +156,19 @@ def plot_n_til(freqs, n_tils, ax=None, absorb=False):
     return ax
 
 
+
 def plot_eps(freqs, eps, ax=None):
+    """
+    Plots the real and imaginary parts of the permittivity.
+
+    Parameters:
+    freqs (ndarray): Array of frequencies.
+    eps (ndarray): Array of complex permittivity values.
+    ax (matplotlib.axes.Axes): Axes to plot on. If None, a new axes is created.
+
+    Returns:
+    matplotlib.axes.Axes: Axes used for the plot.
+    """
     if ax is None:
         fig, ax = plt.subplots()
     
@@ -161,7 +186,20 @@ def plot_eps(freqs, eps, ax=None):
     return ax
 
 
+
 def plot_sigma(freqs, sigma, ax=None, norm=1e5):
+    """
+    Plots the real and imaginary parts of the conductivity, normalized by norm.
+
+    Parameters:
+    freqs (ndarray): Array of frequencies.
+    sigma (ndarray): Array of complex conductivity values.
+    ax (matplotlib.axes.Axes): Axes to plot on. If None, a new axes is created.
+    norm (float): Normalization factor for the conductivity. Use multiples of 10.
+
+    Returns:
+    matplotlib.axes.Axes: Axes used for the plot.
+    """
     if ax is None:
         fig, ax = plt.subplots()
     
@@ -179,7 +217,23 @@ def plot_sigma(freqs, sigma, ax=None, norm=1e5):
 
     return ax
 
+
+
 def plot_transmission(T, axs=None, delta_t=0, color='black', linestyle='-', label=None):
+    """
+    Plots the transmission amplitude and phase.
+
+    Parameters:
+    T (ndarray): 2D array with frequency in T[0], amplitude in T[1], and phase in T[2].
+    axs (array-like): Array of axes to plot on. If None, new axes are created.
+    delta_t (float): Time offset for phase correction.
+    color (str): Color of the plot.
+    linestyle (str): Line style for the plot.
+    label (str): Label for the plot.
+
+    Returns:
+    array-like: Array of axes used for the plot.
+    """
     if axs is None:
         fig, axs = plt.subplots(ncols=2, sharex=True, figsize=(14,6))
     
