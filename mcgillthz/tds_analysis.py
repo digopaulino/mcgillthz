@@ -2,9 +2,9 @@
 import numpy as np
 from scipy.optimize import curve_fit, minimize
 
-from cookethz.fft_utils import *
-from cookethz.import_utils import *
-from cookethz.utils import *
+from .fft_utils import *
+from .import_utils import *
+from .utils import *
 
 
 import numpy as np
