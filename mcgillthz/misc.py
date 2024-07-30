@@ -1,6 +1,6 @@
-from scipy.signal import hilbert
-import numpy as np
-import pandas as pd
+from scipy.signal import hilbert    # type: ignore
+import numpy as np # type: ignore
+import pandas as pd # type: ignore
 
 from .fft_utils import *
 
@@ -36,7 +36,7 @@ def find_CEP(data):
     Returns:
     float: CEP phase in radians.
     """
-    fft = do_fft(data)
+    fft = do_fft(data)       # type: ignore
     hilbert = do_hilbert(data)
 
     peak_freq = fft[0][np.argmax(fft[1])]

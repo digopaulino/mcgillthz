@@ -1,6 +1,6 @@
 
-import numpy as np
-from scipy.optimize import curve_fit, minimize
+import numpy as np  # type: ignore
+from scipy.optimize import curve_fit, minimize # type: ignore
 
 from .fft_utils import *
 from .import_utils import *

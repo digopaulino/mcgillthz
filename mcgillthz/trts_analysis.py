@@ -1,6 +1,6 @@
-import numpy as np
-from scipy.optimize import minimize
-from tqdm import tqdm
+import numpy as np      # type: ignore
+from scipy.optimize import minimize         # type: ignore
+from tqdm import tqdm           # type: ignore
 
 from .fft_utils import *
 from .import_utils import *
@@ -36,7 +36,7 @@ def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_
     for i, time in enumerate(ref_df.columns[1:]):
         ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time]])
         pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time]])
-        T = get_T(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
+        T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
 
         T_df.insert(i, time, T[1], True)
         phase_df.insert(i, time, T[2], True)
@@ -178,7 +178,7 @@ def minimize_err_trts(dsig0, freqs, T_function, sig0s, T_pars, exp_amp, exp_phas
         
         return dsigs, T_amps, T_phases
     
-    elif (start_from == 'tinkham-ref') or (start_from == 'Tinkham-ref'):
+    elif (start_from == 'tinkham-ref') or (start_from == 'Tinkham-Ref'):
         if txt: print(f'Using Tinkham in reflection as initial guess with d={d_tink/1e-9:.0f} nm, and n_sub={nsub_tink:.2f}')
 
         for j in range(len(freqs)):       
@@ -186,7 +186,7 @@ def minimize_err_trts(dsig0, freqs, T_function, sig0s, T_pars, exp_amp, exp_phas
             amp = exp_amp[ ind ]
             phase = exp_phase[ ind ]
 
-            result = minimize_err_at_freq_trts(sig_tinkham_ref(amp, phase, d_tink, nsub_tink), freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
+            result = minimize_err_at_freq_trts(sig_tinkham(amp, phase, d_tink, nsub_tink, reflection=True), freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
             dsigs[j] = result.x[0] + 1j*result.x[1]
 
             T_amps[j], T_phases[j] = T_function(dsigs[j], freqs[j], sig0s[j], *T_pars)

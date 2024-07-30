@@ -1,8 +1,8 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import ipywidgets as ipw
-from scipy.interpolate import interpn
+import numpy as np           # type: ignore
+import matplotlib.pyplot as plt         # type: ignore
+import matplotlib.cm as cm          # type: ignore
+import ipywidgets as ipw            # type: ignore
+from scipy.interpolate import interpn       # type: ignore
 
 from .fft_utils import *
 from .import_utils import *

@@ -1,8 +1,8 @@
-import numpy as np
-from scipy.fft import rfft, rfftfreq
-from scipy.signal.windows import get_window
-import pywt
-import pandas as pd
+import numpy as np          # type: ignore
+from scipy.fft import rfft, rfftfreq        # type: ignore
+from scipy.signal.windows import get_window         # type: ignore
+import pywt         # type: ignore
+import pandas as pd         # type: ignore
 
 from .misc import *
 
