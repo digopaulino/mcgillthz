@@ -2,6 +2,9 @@ import numpy as np
 from scipy.fft import rfft, rfftfreq
 from scipy.signal.windows import get_window
 import pywt
+import pandas as pd
+
+from .misc import *
 
 def pad_to_power2(data, power_of_2=14):
     """
@@ -21,7 +24,7 @@ def pad_to_power2(data, power_of_2=14):
 
     return pad_data
 
-def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=14):
+def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1):
     """
     Performs FFT on the data array.
 
@@ -30,7 +33,8 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=14
     window (str): Window function to apply to the data.
     min_time (float): Minimum time for FFT.
     max_time (float): Maximum time for FFT.
-    pad_power2 (int): Power of 2 to pad the data to.
+    pad_power2 (int): Power of 2 to pad the data to. If number is smaller than the current length, pads until the next power of 2, 
+                        which is the default setting.
 
     Returns:
     ndarray: 2D array with frequency, FFT amplitude, and FFT phase.
@@ -40,23 +44,24 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=14
     E = data[1][mask]
     dt = abs(t[1] - t[0])
 
-    if 2**pad_power2 > len(E):
-        peak_ind = np.argmax(E)
-        N_right = len(E) - peak_ind
-        N_pad = N_right - peak_ind
+    if 2**pad_power2 < len(E):
+        pad_power2 = int(np.log2(len(E))) + 1
+    
+    peak_ind = np.argmax(E)
+    N_right = len(E) - peak_ind
+    N_pad = N_right - peak_ind
 
-        if N_pad > 0:
-            new_E = np.append(np.zeros(np.abs(N_pad)), E)
-        else:
-            new_E = np.append(E, np.zeros(np.abs(N_pad)))
-
-        w = get_window(window, len(new_E), fftbins=False)
-        
-        # Pads
-        E = pad_to_power2(new_E, power_of_2=14)
-        w = pad_to_power2(w, power_of_2=14)
+    # Pads to the left or right to make the window centered on the peak
+    if N_pad > 0:
+        new_E = np.append(np.zeros(N_pad), E)   
     else:
-        w = get_window(window, len(E), fftbins=False)
+        new_E = np.append(E, np.zeros(np.abs(N_pad)))
+
+    w = get_window(window, len(new_E), fftbins=False)
+    
+    # Pads
+    E = pad_to_power2(new_E, power_of_2=pad_power2)
+    w = pad_to_power2(w, power_of_2=pad_power2)
 
     N = len(E)
 
@@ -65,11 +70,38 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=14
 
     fft_amp = np.abs(fft_result)
 
-    # fft_phase = -np.angle(fft_result)  # We unwrap and add the time delayed phase later. See Jepsen https://doi.org/10.1063/1.5047659 for details
-    fft_phase = np.angle(fft_result)  # We unwrap and add the time delayed phase later. See Jepsen https://doi.org/10.1063/1.5047659 for details
+    fft_phase = -np.angle(fft_result)  # We unwrap and add the time delayed phase later. See Jepsen https://doi.org/10.1063/1.5047659 for details
     
 
     return np.array([fft_freq, fft_amp, fft_phase])
+
+
+def do_fft_2d(data_df, window='Hann'):   
+    """
+    Applies FFT (Fast Fourier Transform) to all columns of a pandas DataFrame.
+
+    Parameters:
+    data_df (pd.DataFrame): DataFrame where the first column is the time or x-axis values, and the other columns are the signals to be transformed.
+    window (str): Type of window function to apply before FFT. Default is 'Hann'.
+
+    Returns:
+    amp_df (pd.DataFrame): DataFrame containing the amplitude spectra of the signals.
+    phase_df (pd.DataFrame): DataFrame containing the phase spectra of the signals.
+    """
+    amp_df = pd.DataFrame()
+    phase_df = pd.DataFrame()
+    for i, time in enumerate(data_df.columns[1:]):
+        fft = do_fft(np.array([data_df.iloc[:,0], data_df[time]]), window=window)
+
+        amp_df.insert(i, time, fft[1], True)
+        phase_df.insert(i, time, fft[2], True)
+    
+    amp_df.insert(0, 'freq', fft[0], True)
+    phase_df.insert(0, 'freq', fft[0], True)
+
+    return amp_df, phase_df
+
+
 
 def rms_fft(fft_array, min_f):
     """
@@ -77,7 +109,7 @@ def rms_fft(fft_array, min_f):
 
     Parameters:
     fft_array (ndarray): 2D array with frequency in fft_array[0] and FFT amplitude in fft_array[1].
-    min_f (float): Minimum frequency to consider for RMS calculation.
+    min_f (float): Minimum frequency to consider for RMS calculation. All frequencies above are considered.
 
     Returns:
     float: RMS value of the FFT amplitude above min_f.
@@ -101,7 +133,7 @@ def wavelet(data, wavelet, min_time=-np.inf, max_time=np.inf):
     Returns:
     tuple: Contains the time array, frequency array, and the 2D matrix with the CWT.
     """
-    # Mask the data to include only the specified time range
+
     mask = (data[0] > min_time) & (data[0] < max_time)
     time = data[0][mask]
     field = data[1][mask]
@@ -111,13 +143,11 @@ def wavelet(data, wavelet, min_time=-np.inf, max_time=np.inf):
     # Alternatively, use a linear spacing
     # widths = np.linspace(1, 1024, num=100)
     
-    # Calculate the sampling period
     sampling_period = np.diff(time).mean()
 
-    # Perform the Continuous Wavelet Transform
     cwt, freqs = pywt.cwt(field, widths, wavelet, sampling_period=sampling_period)
     
-    # Take the absolute value of the CWT to get the magnitude
     cwt = np.abs(cwt[:-1, :-1])
 
     return time, freqs, cwt
+

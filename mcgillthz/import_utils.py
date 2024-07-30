@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from .fft_utils import *
-from .utils import *
+from .misc import *
 
 def normalize_data(data, normalize):
     """
