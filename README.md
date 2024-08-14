@@ -10,8 +10,8 @@ To use this package, simply download all the files and extract them into a folde
 
 The following packages must also be installed:
 - numpy, pandas, matplotlib, scipy.
-- PyWavelets (optional) - Does continous wavelet transforms.
 - tqdm (optional) - Adds a progress bar to the code
+- PyWavelets (optional) - Does continous wavelet transforms.
 - ipympl (optional) - Allows for iterative plots on a jupyter notebook.
 <!-- - lmfit - Wraps scipy.optimize to allow for easier manipulation of the parameters. Very useful for fitting optical functions with many parameters. -->
 
@@ -19,7 +19,7 @@ The following packages must also be installed:
 
 # File Tree
 
-In the *src/* folder, the separate files are organized as follows:
+In the *mcgillthz/* folder, the separate files are organized as follows:
 
 - fft_utils.py - All Fourier transform related functions, including padding, wavelet transforms and more.
 - import_utils.py - Functions to easily import experimental data, including error estimation and averaging.

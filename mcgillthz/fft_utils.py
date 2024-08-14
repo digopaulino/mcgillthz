@@ -43,9 +43,6 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1)
     t = data[0][mask]
     E = data[1][mask]
     dt = abs(t[1] - t[0])
-
-    if 2**pad_power2 < len(E):
-        pad_power2 = int(np.log2(len(E))) + 1
     
     peak_ind = np.argmax(E)
     N_right = len(E) - peak_ind
@@ -59,6 +56,9 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1)
 
     w = get_window(window, len(new_E), fftbins=False)
     
+    if 2**pad_power2 < len(new_E):
+        pad_power2 = int(np.log2(len(new_E))) + 1
+
     # Pads
     E = pad_to_power2(new_E, power_of_2=pad_power2)
     w = pad_to_power2(w, power_of_2=pad_power2)

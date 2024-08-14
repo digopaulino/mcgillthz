@@ -1,5 +1,6 @@
 import numpy as np      # type: ignore
 from scipy.optimize import minimize         # type: ignore
+from scipy.interpolate import PchipInterpolator  # type: ignore
 from tqdm import tqdm           # type: ignore
 
 from .fft_utils import *
@@ -139,40 +140,23 @@ def minimize_err_trts(dsig0, freqs, T_function, sig0s, T_pars, exp_amp, exp_phas
     T_amps (ndarray): The calculated transmission amplitudes at the optimized conductivity values.
     T_phases (ndarray): The calculated transmission phases at the optimized conductivity values.
     """
+    # Interpolating the experimental amplitude and phase to the given frequencies
+    amp_interp = PchipInterpolator(exp_freqs, exp_amp)
+    phase_interp = PchipInterpolator(exp_freqs, exp_phase)
+
     # start_from can be "low", "high", "tinkham" or "tinkham-ref"
     dsigs = np.zeros(len(freqs), dtype=complex)
     T_amps = np.zeros(len(freqs))
     T_phases = np.zeros(len(freqs))
 
-
-    if (start_from == 'low') or (start_from == 'Low'):
-        freq0 = np.min(freqs)
-        ind0 = np.argmin(np.abs(exp_freqs - freq0))
-        amp0 = exp_amp[ind0]
-        phase0 = exp_phase[ind0]
-
-        sig0 = sig0s[ np.argmin(freqs) ]
-        result = minimize_err_at_freq_trts(dsig0, freq0, T_function, sig0, T_pars, amp0, phase0, method=method, bound_offset=bound_offset)
-
-    elif (start_from == 'high') or (start_from == 'High'):
-        freq0 = np.max(freqs)
-        ind0 = np.argmin(np.abs(exp_freqs - freq0))
-        amp0 = exp_amp[ind0]
-        phase0 = exp_phase[ind0]
-
-        sig0 = sig0s[ np.argmax(freqs) ]
-        result = minimize_err_at_freq_trts(dsig0, freq0, T_function, sig0, T_pars, amp0, phase0, method=method, bound_offset=bound_offset)
-
-    elif (start_from == 'tinkham') or (start_from == 'Tinkham'):
+    if (start_from == 'tinkham') or (start_from == 'Tinkham'):
         if txt: print(f'Using Tinkham as initial guess with d={d_tink/1e-9:.0f} nm, and n_sub={nsub_tink:.2f}')
 
+        amps = amp_interp(freqs)
+        phases = phase_interp(freqs)
         for j in range(len(freqs)):       
-            ind = np.argmin(np.abs(exp_freqs - freqs[j]))
-            amp = exp_amp[ ind ]
-            phase = exp_phase[ ind ]
-
-            result = minimize_err_at_freq_trts(sig_tinkham(amp, phase, d_tink, nsub_tink), freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
-            dsigs[j] = result.x[0] + 1j*result.x[1]
+            result = minimize_err_at_freq_trts(sig_tinkham(amps[j], phases[j], d_tink, nsub_tink), freqs[j], T_function, sig0s[j], T_pars, amps[j], phases[j], method=method, bound_offset=bound_offset)
+            dsigs[j] = result.x[0] + 1J*result.x[1]
 
             T_amps[j], T_phases[j] = T_function(dsigs[j], freqs[j], sig0s[j], *T_pars)
         
@@ -181,56 +165,64 @@ def minimize_err_trts(dsig0, freqs, T_function, sig0s, T_pars, exp_amp, exp_phas
     elif (start_from == 'tinkham-ref') or (start_from == 'Tinkham-Ref'):
         if txt: print(f'Using Tinkham in reflection as initial guess with d={d_tink/1e-9:.0f} nm, and n_sub={nsub_tink:.2f}')
 
+        amps = amp_interp(freqs)
+        phases = phase_interp(freqs)
         for j in range(len(freqs)):       
-            ind = np.argmin(np.abs(exp_freqs - freqs[j]))
-            amp = exp_amp[ ind ]
-            phase = exp_phase[ ind ]
-
-            result = minimize_err_at_freq_trts(sig_tinkham(amp, phase, d_tink, nsub_tink, reflection=True), freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
-            dsigs[j] = result.x[0] + 1j*result.x[1]
+            result = minimize_err_at_freq_trts(sig_tinkham(amps[j], phases[j], d_tink, nsub_tink, reflection=True), freqs[j], T_function, sig0s[j], T_pars, amps[j], phases[j], method=method, bound_offset=bound_offset)
+            dsigs[j] = result.x[0] + 1J*result.x[1]
 
             T_amps[j], T_phases[j] = T_function(dsigs[j], freqs[j], sig0s[j], *T_pars)
         
         return dsigs, T_amps, T_phases
 
     else:
-        if txt: print('start_from not valid. Select between "low", "high", "tinkham" or "tinkham-ref".')
+        if (start_from == 'low') or (start_from == 'Low'):
+            func = np.min
+            argfunc = np.argmin
+        elif (start_from == 'high') or (start_from == 'High'):
+            func = np.max
+            argfunc = np.argmax
+        else:
+            if txt: print('Invalid "start_from". Options are "low", "high", "tinkham" or "tinkham-ref". Starting from high frequencies instead.')
+            func = np.max
+            argfunc = np.argmax
 
-        return dsigs, T_amps, T_phases
+        freq0 = func(freqs)
+        amp0 = amp_interp(freq0)
+        phase0 = phase_interp(freq0)       
 
-
-    result = minimize_err_at_freq_trts(dsig0, freq0, T_function, sig0, T_pars, amp0, phase0, method=method, bound_offset=bound_offset)
-
-    if not result.success:
-        if txt: print('Initial guess was too off. Trying with Tinkham approximation as initial guess.')
-
-        dsig0 = sig_tinkham(amp0, phase0, d_tink, nsub_tink)
-
+        sig0 = sig0s[ argfunc(freqs) ]
         result = minimize_err_at_freq_trts(dsig0, freq0, T_function, sig0, T_pars, amp0, phase0, method=method, bound_offset=bound_offset)
 
         if not result.success:
-            print('OPTIMIZATION FAILED. Change initial guess, transfer function or solver method.')
+            if txt: print('Initial guess was too off. Trying with Tinkham approximation as initial guess.')
 
-            return dsigs, T_amps, T_phases
-    
+            dsig0 = sig_tinkham(amp0, phase0, d_tink, nsub_tink)
 
-    for i in range(len(freqs)):       
-        if (start_from == 'low') or (start_from == 'Low'):
-            j = i
-        else:
-            j = len(freqs)-1 - i
-    
-        ind = np.argmin(np.abs(exp_freqs - freqs[j]))
-        amp = exp_amp[ ind ]
-        phase = exp_phase[ ind ]
+            result = minimize_err_at_freq_trts(dsig0, freq0, T_function, sig0, T_pars, amp0, phase0, method=method, bound_offset=bound_offset)
 
-        result = minimize_err_at_freq_trts(result.x[0] + 1j*result.x[1], freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
-        dsigs[j] = result.x[0] + 1j*result.x[1]
+            if not result.success:
+                print('OPTIMIZATION FAILED. Change initial guess, transfer function or solver method.')
 
-        T_amps[j], T_phases[j] = T_function(dsigs[j], freqs[j], sig0s[j], *T_pars)
+                return dsigs, T_amps, T_phases
+        
+
+        for i in range(len(freqs)):       
+            if (start_from == 'low') or (start_from == 'Low'):
+                j = i
+            else:
+                j = len(freqs)-1 - i
+        
+            amp = amp_interp(freqs[j])
+            phase = phase_interp(freqs[j]) 
+
+            result = minimize_err_at_freq_trts(result.x[0] + 1j*result.x[1], freqs[j], T_function, sig0s[j], T_pars, amp, phase, method=method, bound_offset=bound_offset)
+            dsigs[j] = result.x[0] + 1J*result.x[1]
+
+            T_amps[j], T_phases[j] = T_function(dsigs[j], freqs[j], sig0s[j], *T_pars)
 
 
-    return dsigs, T_amps, T_phases
+        return dsigs, T_amps, T_phases
 
 
     

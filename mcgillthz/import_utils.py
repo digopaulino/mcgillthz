@@ -1,5 +1,5 @@
 import os
-import numpy as np
+import numpy as np   # type: ignore
 
 from .fft_utils import *
 from .misc import *
@@ -26,7 +26,7 @@ def normalize_data(data, normalize):
 
     return data
 
-def normalize_data_and_fft(data, normalize, fft_original, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=14):
+def normalize_data_and_fft(data, normalize, fft_original, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1):
     """
     Normalizes the data and performs FFT on the normalized data.
 
@@ -34,11 +34,11 @@ def normalize_data_and_fft(data, normalize, fft_original, window='hann', min_tim
     data (ndarray): 2D array with time data in data[0] and field values in data[1].
     normalize (float or int): Normalization option. 1 leaves data as is, 0 normalizes to max, float divides by number.
     fft_original (ndarray): Original FFT data array.
-    window (str): Window function for FFT. Different options include hann, boxcar, blackman, hamming, bohman, blackmanharris, etc.
+    window (str, optional): Window function for FFT. Different options include hann, boxcar, blackman, hamming, bohman, blackmanharris, etc.
                     See documentation of scipy.signal.windows.get_window function for extensive list.
-    min_time (float): Minimum time for FFT.
-    max_time (float): Maximum time for FFT.
-    pad_power2 (int): Power of 2 to pad the data length for FFT.
+    min_time (float, optional): Minimum time for FFT.
+    max_time (float, optional): Maximum time for FFT.
+    pad_power2 (int, optional): Power of 2 to pad the data length for FFT.
 
     Returns:
     tuple: Normalized data array and FFT array. 
@@ -75,22 +75,49 @@ def back_sub(data, max_t_bg=0.1):
 
     return np.array([data[0], data[1] - bg, bg * np.ones(len(data[0]))])
 
-
-def import_file(file, normalize=1, window='hann', max_t_bg=0.1, start_pos=0, max_time=np.inf, pad_power2=14):
+def pad_td_right(data, n_points):
     """
-    Import and process a single time-domain data file.
+    Pads the time-domain data with zeros on the right side.
+
+    Parameters:
+    data (ndarray): 2D array where the first row is time values and the second row is field values.
+    n_points (int): Number of zeros to add to the right of the time-domain data.
+
+    Returns:
+    ndarray: 2D array with padded time values and field values.
+    """
+    dt = np.mean(np.diff(data[0]))
+    tf = np.max(data[0])
+
+    # new_time = np.append(np.linspace(-n_points*dt+ t0, t0-dt, n_points), data[0] )
+    # new_field = np.append(np.zeros(n_points), data[1])
+    new_time  = np.append(data[0], np.linspace(tf+dt, tf+n_points*dt, n_points) )
+    new_field = np.append(data[1], np.zeros(n_points))
+
+    return np.array([new_time, new_field])
+
+
+
+def import_file(file, normalize=1, window='hann', start_pos=0, pad_power2=1, max_t_bg=0.1, max_time=np.inf, pad_td=0):
+    """
+    Imports and processes a single time-domain data file.
 
     Parameters:
     file (str): Path to the data file.
-    normalize (float or int): Normalization option. 1 leaves data as is, 0 normalizes to max, float divides by number.
-    window (str): Window function to use for FFT.
-    max_t_bg (float): Maximum time for background subtraction. All signal before this time will be considered background.
-    start_pos (float): Delay stage position when the scan was started (in mm).
-    max_time (float): Maximum time to consider.
-    pad_power2 (int): Power of 2 for zero-padding in FFT.
-
+    normalize (float or int, optional): Normalization option. Default is 1.
+                              1 leaves data as is, 0 normalizes to max, float divides by specified number.
+    window (str, optional): Window function to use for FFT. Examples include "hann", "hamming", "nuttall".
+                  See scipy.signal.windows documentation for details. Default is "hann".
+    start_pos (float, optional): Initial delay stage position when the scan was started (in mm). Default is 0.
+    pad_power2 (int, optional): Power of 2 for zero-padding in FFT, improving frequency resolution. 
+                    Defaul is 1, where it pads until next power of 2.
+    max_t_bg (float, optional): Maximum time (in ps) for background subtraction. All signal before this time will be considered background.
+    max_time (float, optional): Maximum time (in ps) to consider in the time-domain data. Can be used to window data.
+    pad_td (int): Number of zeros to add to the right of the time-domain data, useful when reference and sample data have different time ranges.
+                    The padding is applied after windowing with "max_time".
+    
     Returns:
-    tuple: Processed time-domain data and its FFT.
+    tuple: Processed time-domain data and its FFT as numpy arrays.
     """
     raw_data = np.genfromtxt(file).transpose()
 
@@ -105,27 +132,33 @@ def import_file(file, normalize=1, window='hann', max_t_bg=0.1, start_pos=0, max
 
     delayed = np.array([time + start_time, field])
 
+    data = pad_td_right(delayed, pad_td)
+
     fft = do_fft(delayed, window=window, pad_power2=pad_power2)
 
     return delayed, fft
 
-def import_files(prefix, time, n_averages=1, posfix='.d24', normalize=1, window='hann', max_t_bg=0.1, start_pos=0, pad_power2=14):
+def import_files(prefix, time, n_averages=1, posfix='.d24', normalize=1, window='hann', max_t_bg=0.1, start_pos=0, pad_power2=1, pad_td=0):
     """
-    Import and process multiple time-domain data files, averaging them in the end and giving error estimates. 
+    Imports and processes multiple time-domain data files, averages them, and provides error estimates.
 
     Parameters:
     prefix (str): Prefix for the data files.
     time (float): Time associated with the first file.
     n_averages (int): Number of files to average.
-    posfix (str): File extension.
-    normalize (float or int): Normalization option. 1 leaves data as is, 0 normalizes to max, float divides by number.
-    window (str): Window function to use for FFT.
-    max_t_bg (float): Maximum time for background subtraction. All signal before this time will be considered background.
-    start_pos (float): Delay stage position when the scan was started (in mm).
-    pad_power2 (int): Power of 2 for zero-padding in FFT.
-
+    posfix (str): File extension, e.g., '.d24'.
+    normalize (float or int, optional): Normalization option. Default is 1.
+                              1 leaves data as is, 0 normalizes to max, float divides by specified number.
+    window (str, optional): Window function to use for FFT. Examples include "hann", "hamming", "nuttall".
+                  See scipy.signal.windows documentation for details. Default is "hann".
+    start_pos (float, optional): Initial delay stage position when the scan was started (in mm). Default is 0.
+    pad_power2 (int, optional): Power of 2 for zero-padding in FFT, improving frequency resolution. 
+                    Defaul is 1, where it pads until next power of 2.
+    max_t_bg (float, optional): Maximum time (in ps) for background subtraction. All signal before this time will be considered background.
+    pad_td (int): Number of zeros to add to the right of the time-domain data, useful when reference and sample data have different time ranges.
+                    The padding is applied after windowing with "max_time".
     Returns:
-    tuple: Averaged processed time-domain data and its FFT.
+    tuple: Averaged processed time-domain data and its FFT as numpy arrays.
     """
     raw_list = []
     i = 0
@@ -144,36 +177,57 @@ def import_files(prefix, time, n_averages=1, posfix='.d24', normalize=1, window=
 
     delayed_list = [np.array([d[0] + start_time, d[1]]) for d in data_list]
 
-    fft_list = [do_fft(d, window=window, pad_power2=pad_power2) for d in delayed_list]
+    data_list = [ pad_td_right(d, pad_td) for d in delayed_list ]
+
+
+    fft_list = [do_fft(d, window=window, pad_power2=pad_power2) for d in data_list]
 
     avg_data = avg_err_files(delayed_list)
     avg_fft = avg_err_fft_files(fft_list)
 
     return avg_data, avg_fft
 
-def import_average_file(file, return_props=False, normalize=1, window='hann', pad_power2=14, max_t_bg=0.1):
+def import_average_file(file, return_props=False, normalize=1, window='hann', start_pos=0, pad_power2=1, max_t_bg=0.1, max_time=np.inf, pad_td=0):
     """
-    Imports and processes data from an average file, with options to normalize, pad, and subtract background.
+    Imports and processes data from an averaged time-domain data file with options for normalization, padding, and background subtraction.
 
     Parameters:
-    file (str): Path to the data file.
-    return_props (bool): Whether to return properties from the file header. Includes lock-in unit, start position, 
-                            # of data points, time resolution in fs, and the norm used.
-    normalize (float or int): Normalization option. 1 leaves data as is, 0 normalizes to max, float divides by number.
-    pad_power2 (int): Power of 2 to pad the data length for FFT.
-    max_t_bg (float): Maximum time for background subtraction. All signal before this time will be considered background.
+    file (str): Path to the averaged data file.
+    return_props (bool, optional): If True, returns properties from the file header such as lock-in unit, start position, 
+                         number of data points, time resolution, and normalization used. Default is False.
+    normalize (float or int, optional): Normalization option. Default is 1.
+                              1 leaves data as is, 0 normalizes to max, float divides by specified number.
+    window (str, optional): Window function to use for FFT. Examples include "hann", "hamming", "nuttall".
+                  See scipy.signal.windows documentation for details. Default is "hann".
+    start_pos (float, optional): Initial delay stage position when the scan was started (in mm). Default is 0.
+    pad_power2 (int, optional): Power of 2 for zero-padding in FFT, improving frequency resolution. 
+                    Defaul is 1, where it pads until next power of 2.
+    max_t_bg (float, optional): Maximum time (in ps) for background subtraction. All signal before this time will be considered background.
+    max_time (float, optional): Maximum time (in ps) to consider in the time-domain data. Can be used to window data.
+    pad_td (int): Number of zeros to add to the right of the time-domain data, useful when reference and sample data have different time ranges.
+                    The padding is applied after windowing with "max_time".
 
     Returns:
     tuple: If return_props is False, returns (data, fft).
            If return_props is True, returns (data, fft, properties).
-                data: 2d array of time and field values.
-                fft: np.array with 5 columns - Frequencies, FFT Amplitude, FFT Phase, FFT Amp error and and FFT Phase error.
+           - data: 2D array with time and field values.
+           - fft: 2D array with 5 columns: Frequencies, FFT Amplitude, FFT Phase, FFT Amplitude error, and FFT Phase error.
+           - properties: Dictionary containing metadata from the file header.
     """
     data = np.genfromtxt(file, skip_header=1).transpose()
     data[0] = np.abs(data[0])
-    data = back_sub(data, max_t_bg=max_t_bg)
+    data = back_sub(data, max_t_bg)
     data = normalize_data(data, normalize)
-    fft = do_fft(data,  window=window, pad_power2=pad_power2)
+
+    time = data[0][data[0] < max_time]
+    field = data[1][data[0] < max_time]
+
+    start_time = 2 * np.abs(start_pos) * 1e-3 / c / 1e-12  # in ps
+
+    data = np.array([time + start_time, field])
+    data = pad_td_right(data, pad_td)
+
+    fft = do_fft(data, window=window, pad_power2=pad_power2)
 
     if return_props:
         properties = {}

@@ -80,6 +80,12 @@ def residuals(x_exp, y_exp, x_fit, y_fit):
     return res
 
 
+def abs_coef_from_n(n, freq):
+    wvl = c/(freq*1e12)
+    alpha = 4 * np.pi * np.imag(n) / wvl / 100       # in cm-1
+    return alpha
+
+
 def eps_from_sig(sig, freq, eps_inf=1.0):
     """
     Computes the complex permittivity from conductivity.
@@ -270,5 +276,25 @@ def eps_from_sig_all(sig_df, eps_inf=1, sig_eq=None):
     return eps_df
 
 
+def n_thick_transp(freq, amp, phase, d, nsub=1):
+    """
+    Computes the complex refractive index from amplitude and phase assuming a thick and a transparent non-absorbing sample.
+
+    Parameters:
+    freq (ndarray): Frequency, in THz.
+    amp (ndarray): Transmission amplitude.
+    phase (ndarray): Transmission phase.
+    d (float): Thickness of the material.
+    n_sub (float or ndarray): Refractive index of the substrate.
+    
+    Returns:
+    ndarray: Refractive index.
+    """
+    k = 2*np.pi*(freq*1e12)/c 
+    
+    n = 1 + phase/(k*d)
+    kappa = -1/(k*d) * np.log( (n+1)*(n+nsub)*amp / (2*(1+nsub))  )
+
+    return n + 1j*kappa
 
 

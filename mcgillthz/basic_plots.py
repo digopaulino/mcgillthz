@@ -1,6 +1,7 @@
 import numpy as np           # type: ignore
 import matplotlib.pyplot as plt         # type: ignore
 import matplotlib.cm as cm          # type: ignore
+from matplotlib import cycler        # type: ignore
 import ipywidgets as ipw            # type: ignore
 from scipy.interpolate import interpn       # type: ignore
 
@@ -13,6 +14,7 @@ params = {
     'font.size': 18,
 
     'axes.linewidth': 2,
+    'axes.prop_cycle': cycler('color', ['0C5DA5', '00B945', 'FF9500', 'FF2C00', '845B97', '474747', '9e9e9e']),
     'lines.linewidth': 2,
     'lines.markersize': 6,
 
@@ -43,7 +45,7 @@ params = {
 }
 plt.rcParams.update(params)
 
-def plot_spectrum(data, fft, axs=None, color='black', label='', normalize=1, linestyle='-', marker='', alpha=1, dpi=80, dislocate0=False, max_freq=20, plot_err=False):
+def plot_spectrum(data, fft, axs=None, color='black', label='', normalize=1, linestyle='-', marker='', alpha=1, dpi=80, dislocate0=False, max_freq=np.inf, plot_err=False):
     """
     Plots the time domain and frequency domain spectrum of the data.
 
@@ -90,8 +92,9 @@ def plot_spectrum(data, fft, axs=None, color='black', label='', normalize=1, lin
     axs[0].set_xlabel('Time (ps)')
 
     axs[1].plot(fft[0], fft[1], color=color, label=label, linestyle=linestyle, marker=marker, alpha=alpha)
-    noise_floor = rms_fft(fft, max_freq)
-    axs[1].axhline(noise_floor, color=color, linestyle=linestyle, alpha=alpha/2)
+    if max_freq is not np.inf:
+        noise_floor = rms_fft(fft, max_freq)
+        axs[1].axhline(noise_floor, color=color, linestyle=linestyle, alpha=alpha/2)
 
     if plot_err and fft.shape[0] == 5:
         axs[1].fill_between(fft[0], (fft[1] - fft[3]), (fft[1] + fft[3]), color=color, alpha=alpha/5)
@@ -134,8 +137,7 @@ def plot_n_til(freqs, n_tils, ax=None, absorb=False, label=''):
 
     if absorb:
         ax2 = ax.twinx()
-        wvl = c/(freqs*1e12)
-        alphas = 4 * np.pi * np.imag(n_tils) / wvl / 100       # in cm-1
+        alphas = abs_coef_from_n(n_tils, freqs)
 
         ax2.plot(freqs, alphas, color='blue', linestyle='-')
         ax.plot([], [], color='blue', linestyle='-', label=label+r'$\alpha$')
