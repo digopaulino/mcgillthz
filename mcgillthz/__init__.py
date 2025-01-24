@@ -1,5 +1,5 @@
 # All functions can be collectivelly imported as
-# from cookethz import *
+# from mcgillthz import *
 
 from .misc import *
 from .import_utils import *

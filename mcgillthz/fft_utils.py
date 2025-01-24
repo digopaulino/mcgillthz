@@ -1,5 +1,5 @@
 import numpy as np          # type: ignore
-from scipy.fft import rfft, rfftfreq        # type: ignore
+from scipy.fft import rfft, rfftfreq, irfft        # type: ignore
 from scipy.signal.windows import get_window         # type: ignore
 import pywt         # type: ignore
 import pandas as pd         # type: ignore
@@ -24,7 +24,7 @@ def pad_to_power2(data, power_of_2=14):
 
     return pad_data
 
-def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1):
+def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1, inverse=False):
     """
     Performs FFT on the data array.
 
@@ -35,6 +35,7 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1)
     max_time (float): Maximum time for FFT.
     pad_power2 (int): Power of 2 to pad the data to. If number is smaller than the current length, pads until the next power of 2, 
                         which is the default setting.
+    inverse (bool): If True, calculates the inverse Fourier transform instead.
 
     Returns:
     ndarray: 2D array with frequency, FFT amplitude, and FFT phase.
@@ -65,8 +66,16 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1)
 
     N = len(E)
 
-    fft_result = rfft(E * w)
-    fft_freq = rfftfreq(N, dt)
+    if inverse:
+        fft_result = irfft(E * w, len(E))
+
+        Fs = np.max(t)
+        fft_freq = np.arange(0, len(E)/Fs, 1/Fs)
+    else:
+        fft_result = rfft(E * w)
+        fft_freq = rfftfreq(N, dt)
+
+
 
     fft_amp = np.abs(fft_result)
 
@@ -76,13 +85,16 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1)
     return np.array([fft_freq, fft_amp, fft_phase])
 
 
-def do_fft_2d(data_df, window='Hann'):   
+def do_fft_2d(data_df, window='Hann', min_time=-np.inf, max_time=np.inf, inverse=False):   
     """
     Applies FFT (Fast Fourier Transform) to all columns of a pandas DataFrame.
 
     Parameters:
     data_df (pd.DataFrame): DataFrame where the first column is the time or x-axis values, and the other columns are the signals to be transformed.
     window (str): Type of window function to apply before FFT. Default is 'Hann'.
+    min_time (float): Minimum time for FFT.
+    max_time (float): Maximum time for FFT.
+    inverse (bool): If True, calculates the inverse Fourier transform instead.
 
     Returns:
     amp_df (pd.DataFrame): DataFrame containing the amplitude spectra of the signals.
@@ -91,7 +103,7 @@ def do_fft_2d(data_df, window='Hann'):
     amp_df = pd.DataFrame()
     phase_df = pd.DataFrame()
     for i, time in enumerate(data_df.columns[1:]):
-        fft = do_fft(np.array([data_df.iloc[:,0], data_df[time]]), window=window)
+        fft = do_fft(np.array([data_df.iloc[:,0], data_df[time]]), window=window, min_time=min_time, max_time=max_time, inverse=inverse)
 
         amp_df.insert(i, time, fft[1], True)
         phase_df.insert(i, time, fft[2], True)

@@ -262,7 +262,7 @@ def plot_transmission(T, axs=None, delta_t=0, color='black', linestyle='-', labe
         fig, axs = plt.subplots(ncols=2, sharex=True, figsize=(14,6))
     
     
-    if delta_t > 0:
+    if delta_t != 0:
         offset = 2*np.pi * delta_t * T[0]
         axs[1].set_ylabel(r'$\phi - \phi_{offset}$ (rad.)')
         axs[1].set_ylim(-6.28, 6.28)
@@ -276,7 +276,7 @@ def plot_transmission(T, axs=None, delta_t=0, color='black', linestyle='-', labe
 
     axs[0].set_xlabel('Frequency (THz)')
     axs[1].set_xlabel('Frequency (THz)')
-    axs[0].set_ylabel('|T|')
+    axs[0].set_ylabel(r'$|T(\omega)|$')
 
     axs[0].set_xlim(0, 1.1*np.max(T[0]))
     axs[0].set_ylim(0, 1.1)
@@ -315,6 +315,24 @@ def autoscale_y(ax, margin=0.1):
         if new_top > top: top = new_top
 
     ax.set_ylim(bot, top)
+
+def autoscale_y_all(obj, margin=0.1, obj_is_figure=False):
+    """
+    Wrapper for autoscale_y() function, applying for all axes in obj.
+    
+    Parameters:
+    obj (Figure or list of Axes) -- a list of matplotlib axes or a matplotlib figure
+    margin (float) -- the fraction of the total height of the y-data to pad the upper and lower ylims
+    obj_if_figure (bool) -- tag to be turned on when obj is a figure
+    """
+    if obj_is_figure:
+        axes = obj.axes
+    else:
+        axes = obj
+    axes = axes.flatten()
+
+    for a in axes:
+        autoscale_y(a, margin=margin)
 
 
 def plot_transmission_trts(T_amp, T_phase, time, color='black', label='', axs=None, xlim=None, reflection=False, sub_one=False):
@@ -579,14 +597,14 @@ def plot_slider(data, fig=None, ax=None, color='black', fix_y=False, norm=1, add
     taus = data.columns[1:].values
     slider = ipw.widgets.SelectionSlider(
         options=taus,
-        value='0',
+        value=taus[0],
         description='tau (ps)',
         disabled=False,
         readout=True
     )
 
     # Plot the initial data
-    line, = ax.plot(data.iloc[:,0], (data['0'] + add_array) / norm, color=color, linestyle=linestyle, label=label)
+    line, = ax.plot(data.iloc[:,0], (data[taus[0]] + add_array) / norm, color=color, linestyle=linestyle, label=label)
     
     def update(change):
         line.set_ydata((data[change.new] + add_array) / norm)
@@ -662,13 +680,15 @@ def plot_transmission_fit(exp_freq, exp_amp, exp_phase, fit_freq, fit_amp, fit_p
 
     res_amp = residuals(exp_freq, exp_amp, fit_freq, fit_amp)
     res_phase = residuals(exp_freq, exp_phase, fit_freq, fit_phase)
-    
-    axs[0, 0].plot(fit_freq, res_amp, 'or')
-    axs[0, 1].plot(fit_freq, res_phase, 'or')
+    rms = np.sqrt(np.sum(res_amp**2) + np.sum(res_phase**2))
 
+    axs[0, 0].plot(fit_freq, res_amp, 'or')
+    axs[0, 1].plot(fit_freq, res_phase, 'or', label=f'RMS={rms:.3e}')
+    
     axs[0, 0].axhline(0, linestyle='--')
     axs[0, 1].axhline(0, linestyle='--')
     axs[0, 0].set_ylabel('Residuals')
+    axs[0, 1].legend()
     
     return fig, axs
 
