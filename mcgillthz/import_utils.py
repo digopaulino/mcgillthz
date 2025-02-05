@@ -229,7 +229,7 @@ def import_file(file, normalize=1, window='hann', start_pos=0, pad_power2=1, max
 
     return delayed, fft
 
-def import_files_td_only(prefix, time, n_averages=1, posfix='.d25', max_t_bg=0.1, shift_peak=True, channel2=True):
+def import_files_td_only(prefix, time, n_averages=1, posfix='.d25', max_t_bg=0.1, shift_peak=False, channel2=True):
     """
     Imports, processes, and averages multiple time-domain data files.
 
