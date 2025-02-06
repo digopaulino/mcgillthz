@@ -1,11 +1,13 @@
 """ 
 To run this code, copy it in the folder with all data files. Change the values below accordingly.
+NOTE: calculate_std not implemented
 """
 max_t_bg = 0.1          # Time range at which a background offset will be subtracted
 posfix = '.d25'         # Posfix of the data files. Usually .d25, .d24, etc...
 multiply_ch1 = 1/100    # I was reading in 0.1 V scale
 multiply_ch2 = 1/100
 ref_sign = '-'          # Signal used to obtain E_ref from E1 and E2. If '-', then E_ref = E1 - E2
+calculate_std = True
 
 
 
@@ -173,8 +175,13 @@ def import_n_average_fd(prefix, time, n_averages, posfix, max_t_bg=0.1, ref_sign
     fft_b_avg = np.mean(fft_list[:,2], axis=0)
 
     avg_a, avg_b = inverse_fourier_transform([fft_freq, fft_a_avg, fft_b_avg])
-    # print(len(data_list[0][0]))
-    # print(len(avg_a))
+
+    if calculate_std:
+        fft_a_max = np.mean(fft_list[:,1], axis=0) + np.std(fft_list[:,1], axis=0)
+        fft_a_min = np.mean(fft_list[:,1], axis=0) - np.std(fft_list[:,1], axis=0)
+
+        fft_b_max = np.mean(fft_list[:,2], axis=0) + np.std(fft_list[:,2], axis=0)
+        fft_b_min = np.mean(fft_list[:,2], axis=0) - np.std(fft_list[:,2], axis=0)
 
     return data_list[0][0], avg_a, avg_b
 
@@ -200,12 +207,22 @@ def open_files(filedir, filenames):
     E2_2D = np.zeros((m, 1 + n))
     ERef_2D = np.zeros((m, 1 + n))
     EPump_2D = np.zeros((m, 1 + n))
+    if calculate_std:
+        E1_std_2D = np.zeros((m, 1 + n))
+        E2_std_2D = np.zeros((m, 1 + n))
+        ERef_std_2D = np.zeros((m, 1 + n))
+        EPump_std_2D = np.zeros((m, 1 + n))        
 
     # Copy time axis
     E1_2D[:, 0] = time_axis  
     E2_2D[:, 0] = time_axis  
     ERef_2D[:, 0] = time_axis
     EPump_2D[:, 0] = time_axis
+    if calculate_std:
+        E1_std_2D[:,0] = time_axis 
+        E2_std_2D[:,0] = time_axis 
+        ERef_std_2D[:,0] = time_axis 
+        EPump_std_2D[:,0] = time_axis      
 
     # Write Pumpindex.dat
     np.savetxt('Pumpindex.dat', np.arange(1, n + 1), fmt='%d', newline='\n')

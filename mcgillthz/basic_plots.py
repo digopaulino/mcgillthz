@@ -45,7 +45,7 @@ params = {
 }
 plt.rcParams.update(params)
 
-def plot_spectrum(data, fft, axs=None, color='black', label='', normalize=1, linestyle='-', marker='', alpha=1, dpi=80, dislocate0=False, max_freq=np.inf, plot_err=False):
+def plot_spectrum(data, fft, axs=None, color='black', label=None, normalize=1, linestyle='-', marker='', alpha=1, dpi=80, dislocate0=False, max_freq=np.inf, plot_err=False):
     """
     Plots the time domain and frequency domain spectrum of the data.
 
@@ -114,6 +114,67 @@ def plot_spectrum(data, fft, axs=None, color='black', label='', normalize=1, lin
     else:
         return axs
     
+
+def plot_spectrum_slider(data, fft, axs=None, fig=None, slider=None, color='black', label=None, normalize=1, linestyle='-', marker='', alpha=1, dpi=80):
+    if axs is None:
+        fig, axs = plt.subplots(ncols=2, figsize=(14,6), dpi=dpi)
+    
+    taus = data.columns[1:].values
+    if slider is None:
+        slider = ipw.widgets.SelectionSlider(
+            options=taus,
+            value=taus[0],
+            description='tau (ps)',
+            disabled=False,
+            readout=True
+        )
+
+    if normalize == 0:
+        norm_t = data[1].max()
+        axs[0].set_ylabel('Normalized Electric Field (a.u.)')
+    elif normalize == 1:
+        norm_t = 1
+        axs[0].set_ylabel('Electric Field (a.u.)')
+    else:
+        norm_t = normalize
+        axs[0].set_ylabel('Normalized Electric Field (a.u.)')
+
+    line1, = axs[0].plot(data.iloc[:,0], data.iloc[:,1]/norm_t, color=color, linestyle=linestyle, marker=marker, alpha=alpha, label=label)
+    axs[0].axhline(0, linestyle='dashed', color='grey', linewidth=1)
+    axs[0].set_xlabel('Time (ps)')
+
+    line2, = axs[1].plot(fft.iloc[:,0], fft.iloc[:,1], color=color, label=label, linestyle=linestyle, marker=marker, alpha=alpha)
+
+
+
+    
+    if label is not None:
+        axs[1].legend()
+
+    axs[1].set_ylabel('FFT Amplitude (a.u.)')
+    axs[1].set_xlabel('Frequency (THz)')
+    axs[1].set_yscale('log')
+    axs[1].set_ylim(bottom=(fft.iloc[:,1:]).max().max()/1e4)
+    axs[1].set_xlim(0, fft.iloc[:,0].max())
+    axs[1].grid()
+
+    max_1 = data.iloc[:,1:].max().max()/norm_t
+    min_1 = data.iloc[:,1:].min().min()/norm_t
+    axs[0].set_ylim(min_1, max_1)
+    axs[0].set_xlim(0, data.iloc[:,0].max())
+    def update(change):
+        line1.set_ydata(data[change.new]/norm_t)
+        line2.set_ydata(fft[change.new])
+        
+        # if not fix_y:
+        #     autoscale_y(axs[0])
+        #     autoscale_y(axs[1])
+        
+        fig.canvas.draw_idle()
+    
+    slider.observe(update, 'value')
+
+    return slider, fig, axs
 
 
 def plot_n_til(freqs, n_tils, ax=None, absorb=False, label=''):
@@ -382,7 +443,8 @@ def plot_transmission_trts(T_amp, T_phase, time, color='black', label='', axs=No
     return axs
 
 
-def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, color='black', fix_y=False, linestyle='-', xlim=None, reflection=False, sub_one=False):
+def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, slider=None, color='black', fix_y=False, linestyle='-', 
+                             xlim=None, reflection=False, sub_one=False, label=None):
     """
     Plots a slider to dynamically visualize 2D transmission amplitude and phase over time.
 
@@ -402,13 +464,14 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, color='black', 
         fig, axs = plt.subplots(ncols=2, figsize=(14,6), sharex=True)
     
     taus = T_amp.columns[1:].values
-    slider = ipw.widgets.SelectionSlider(
-        options=taus,
-        value=taus[0],
-        description='tau (ps)',
-        disabled=False,
-        readout=True
-    )
+    if slider is None:
+        slider = ipw.widgets.SelectionSlider(
+            options=taus,
+            value=taus[0],
+            description='tau (ps)',
+            disabled=False,
+            readout=True
+        )
 
     sub = 0
     if sub_one: sub = 1
@@ -425,18 +488,26 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, color='black', 
             axs[0].set_ylabel(r'$|T|$')
 
     line1, = axs[0].plot(T_amp.iloc[:, 0], T_amp.iloc[:, 1] - sub, color=color, linestyle=linestyle)
-    line2, = axs[1].plot(T_phase.iloc[:, 0], T_phase.iloc[:, 1], color=color, linestyle=linestyle)
+    line2, = axs[1].plot(T_phase.iloc[:, 0], T_phase.iloc[:, 1], color=color, linestyle=linestyle, label=label)
+
+    if label is not None:
+        axs[1].legend()
 
     if xlim is not None:
         axs[0].set_xlim(xlim)
-        autoscale_y(axs[0])
-        autoscale_y(axs[1])
+        max_1 = T_amp[ (T_amp.iloc[:,0] >= xlim[0]) & (T_amp.iloc[:,0] <= xlim[1])].iloc[:,1:].max().max()
+        max_2 = T_phase[ (T_phase.iloc[:,0] >= xlim[0]) & (T_phase.iloc[:,0] <= xlim[1])].iloc[:,1:].max().max()
+        min_1 = T_amp[ (T_amp.iloc[:,0] >= xlim[0]) & (T_amp.iloc[:,0] <= xlim[1])].iloc[:,1:].min().min()
+        min_2 = T_phase[ (T_phase.iloc[:,0] >= xlim[0]) & (T_phase.iloc[:,0] <= xlim[1])].iloc[:,1:].min().min()
+
+        axs[0].set_ylim(min_1 - sub, max_1 - sub)
+        axs[1].set_ylim(min_2, max_2)
     else:
-        axs[0].set_ylim(-1, 1)
+        axs[0].set_ylim(-1, 1.5)
         axs[1].set_ylim(-3.14, 3.14)
     
     def update(change):
-        line1.set_ydata(T_amp[change.new])
+        line1.set_ydata(T_amp[change.new] - sub)
         line2.set_ydata(T_phase[change.new])
         
         if not fix_y:
@@ -447,7 +518,7 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, color='black', 
     
     slider.observe(update, 'value')
 
-    return slider
+    return slider, fig, axs
 
 
 def interpolate_map(T, N=5, max_tau=5):
@@ -605,6 +676,11 @@ def plot_slider(data, fig=None, ax=None, color='black', fix_y=False, norm=1, add
 
     # Plot the initial data
     line, = ax.plot(data.iloc[:,0], (data[taus[0]] + add_array) / norm, color=color, linestyle=linestyle, label=label)
+
+    # Sets y-axis to fit maximum and min value within xlim
+    max_y = data.iloc[:,1:].max().max()
+    min_y = data.iloc[:,1:].min().min()
+    ax.set_ylim(min_y - 0.1*np.abs(min_y) , max_y + 0.1*np.abs(max_y))
     
     def update(change):
         line.set_ydata((data[change.new] + add_array) / norm)
@@ -675,7 +751,7 @@ def plot_transmission_fit(exp_freq, exp_amp, exp_phase, fit_freq, fit_amp, fit_p
         autoscale_y(axs[1, 0])
         autoscale_y(axs[1, 1])
     else:
-        axs[1, 0].set_ylim(-1, 1)
+        axs[1, 0].set_ylim(-1, 1.5)
         axs[1, 1].set_ylim(-3.14, 3.14)
 
     res_amp = residuals(exp_freq, exp_amp, fit_freq, fit_amp)
@@ -750,17 +826,22 @@ def plot_transmission_fit_slider(exp_amp, exp_phase, fit_amp, fit_phase, fix_y=F
 
     if xlim is not None:
         axs[1, 0].set_xlim(xlim)
-        autoscale_y(axs[1, 0])
-        autoscale_y(axs[1, 1])
+        max_1 = exp_amp[ (exp_amp.iloc[:,0] >= xlim[0]) & (exp_amp.iloc[:,0] <= xlim[1])].iloc[:,1:].max().max()
+        max_2 = exp_phase[ (exp_phase.iloc[:,0] >= xlim[0]) & (exp_phase.iloc[:,0] <= xlim[1])].iloc[:,1:].max().max()
+        min_1 = exp_amp[ (exp_amp.iloc[:,0] >= xlim[0]) & (exp_amp.iloc[:,0] <= xlim[1])].iloc[:,1:].min().min()
+        min_2 = exp_phase[ (exp_phase.iloc[:,0] >= xlim[0]) & (exp_phase.iloc[:,0] <= xlim[1])].iloc[:,1:].min().min()
+        
+        axs[1,0].set_ylim(min_1-sub, max_1-sub)
+        axs[1,1].set_ylim(min_2, max_2)
     else:
-        axs[1, 0].set_ylim(-1, 1)
+        axs[1, 0].set_ylim(-1, 1.5)
         axs[1, 1].set_ylim(-3.14, 3.14)
     
     
     def update(change):
-        line1.set_ydata(exp_amp[change.new]-1 )
+        line1.set_ydata(exp_amp[change.new]-sub )
         line2.set_ydata(exp_phase[change.new] )
-        line3.set_ydata(fit_amp[change.new]-1 )
+        line3.set_ydata(fit_amp[change.new]-sub )
         line4.set_ydata(fit_phase[change.new] )
 
         res_line1.set_ydata( residuals(exp_amp.iloc[:,0], exp_amp[change.new], fit_amp.iloc[:,0], fit_amp[change.new]))
