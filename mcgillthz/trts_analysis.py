@@ -9,7 +9,8 @@ from .misc import *
 from .tds_analysis import *
 
 
-def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_for_fit=[2,4]):
+def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_for_fit=[2,4], 
+               ref_amp_std=None, ref_phase_std=None, pump_amp_std=None, pump_phase_std=None):
     """
     Calculates the transmission or reflection amplitude and phase using reference and pumped data. 
 
@@ -34,18 +35,41 @@ def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_
     """
     T_df = pd.DataFrame()
     phase_df = pd.DataFrame()
-    for i, time in enumerate(ref_df.columns[1:]):
-        ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time]])
-        pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time]])
-        T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
 
-        T_df.insert(i, time, T[1], True)
-        phase_df.insert(i, time, T[2], True)
+    if ref_amp_std is not None:
+        T_std_df = pd.DataFrame()
+        phase_std_df = pd.DataFrame()
+
+        for i, time in enumerate(ref_df.columns[1:]):
+            ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time], ref_amp_std[time], ref_phase_std[time]])
+            pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time], pump_amp_std[time], pump_phase_std[time]])
+            T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
+
+            T_df.insert(i, time, T[1], True)
+            phase_df.insert(i, time, T[2], True)
+            T_std_df.insert(i, time, T[3], True)
+            phase_std_df.insert(i, time, T[3], True)
+
+        T_df.insert(0, 'freq', T[0], True)
+        phase_df.insert(0, 'freq', T[0], True)
+        T_std_df.insert(0, 'freq', T[0], True)
+        phase_std_df.insert(0, 'freq', T[0], True)
+
+        return T_df, phase_df, T_std_df, phase_std_df
+
+    else:
+        for i, time in enumerate(ref_df.columns[1:]):
+            ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time]])
+            pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time]])
+            T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
+
+            T_df.insert(i, time, T[1], True)
+            phase_df.insert(i, time, T[2], True)
     
-    T_df.insert(0, 'freq', T[0], True)
-    phase_df.insert(0, 'freq', T[0], True)
+        T_df.insert(0, 'freq', T[0], True)
+        phase_df.insert(0, 'freq', T[0], True)
 
-    return T_df, phase_df
+        return T_df, phase_df
 
 
 

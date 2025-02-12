@@ -444,7 +444,7 @@ def plot_transmission_trts(T_amp, T_phase, time, color='black', label='', axs=No
 
 
 def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, slider=None, color='black', fix_y=False, linestyle='-', 
-                             xlim=None, reflection=False, sub_one=False, label=None):
+                             xlim=None, reflection=False, sub_one=False, label=None, T_amp_std=None, T_phase_std=None, alpha_std=0.5):
     """
     Plots a slider to dynamically visualize 2D transmission amplitude and phase over time.
 
@@ -489,7 +489,11 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, slider=None, co
 
     line1, = axs[0].plot(T_amp.iloc[:, 0], T_amp.iloc[:, 1] - sub, color=color, linestyle=linestyle)
     line2, = axs[1].plot(T_phase.iloc[:, 0], T_phase.iloc[:, 1], color=color, linestyle=linestyle, label=label)
-
+    if T_amp_std is not None:
+        fill1 = axs[0].fill_between(T_amp_std.iloc[:,0], (T_amp.iloc[:, 1] - T_amp_std.iloc[:, 1]) - sub, 
+                                    (T_amp.iloc[:, 1] + T_amp_std.iloc[:, 1]) - sub, color=color, alpha=alpha_std)
+        fill2 = axs[1].fill_between(T_phase_std.iloc[:,0], (T_phase.iloc[:, 1] - T_phase_std.iloc[:, 1]), 
+                                    (T_phase.iloc[:, 1] + T_phase_std.iloc[:, 1]), color=color, alpha=alpha_std)
     if label is not None:
         axs[1].legend()
 
@@ -507,8 +511,19 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, slider=None, co
         axs[1].set_ylim(-3.14, 3.14)
     
     def update(change):
-        line1.set_ydata(T_amp[change.new] - sub)
+        line1.set_ydata(T_amp[change.new] - sub)    # Update the lines
         line2.set_ydata(T_phase[change.new])
+
+        if T_amp_std is not None:                   # Update the fill_between
+            nonlocal fill1, fill2
+
+            fill1.remove()  # Remove previous fill1 and fill2
+            fill2.remove()
+            
+            fill1 = axs[0].fill_between(T_amp_std.iloc[:,0], (T_amp[change.new] - T_amp_std[change.new]) - sub, 
+                                        (T_amp[change.new] + T_amp_std[change.new]) - sub, color=color, alpha=alpha_std)
+            fill2 = axs[1].fill_between(T_phase_std.iloc[:,0], (T_phase[change.new] - T_phase_std[change.new]), 
+                                        (T_phase[change.new] + T_phase_std[change.new]), color=color, alpha=alpha_std)
         
         if not fix_y:
             autoscale_y(axs[0])
