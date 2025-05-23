@@ -82,17 +82,12 @@ def back_sub(data, max_t_bg=0.1, channel2=False):
     """
     mask = (data[0] < max_t_bg)
     bg = np.mean(data[1][mask])
-    if np.abs(np.nan) > 0:
-        # print('subtracting bg')
-        if channel2:
-            return np.array([data[0], data[1] - bg, data[2]])
-        else:
-            return np.array([data[0], data[1] - bg, bg * np.ones(len(data[0]))])
+
+    if channel2:
+        return np.array([data[0], data[1] - bg, data[2]])
     else:
-        if channel2:
-            return np.array([data[0], data[1], data[2]])
-        else:
-            return np.array([data[0], data[1], np.ones(len(data[0]))])
+        return np.array([data[0], data[1] - bg, bg * np.ones(len(data[0]))])
+
 
 def pad_td_right(data, n_points, channel2=False):
     """
@@ -204,7 +199,8 @@ def import_file(file, normalize=1, window='hann', start_pos=0, pad_power2=1, max
                     Defaul is 1, where it pads until next power of 2.
     max_t_bg (float, optional): Maximum time (in ps) for background subtraction. All signal before this time will be considered background.
     max_time (float, optional): Maximum time (in ps) to consider in the time-domain data. Can be used to window data.
-    pad_td (int): Number of zeros to add to the right of the time-domain data, useful when reference and sample data have different time ranges.
+    pad_td (int): Number of zeros to add to the left (if number is negative), or to the right if positive, of the time-domain data. 
+                    Useful when reference and sample data have different time ranges, or when you want the window to be centered.
                     The padding is applied after windowing with "max_time".
     
     Returns:
@@ -223,11 +219,16 @@ def import_file(file, normalize=1, window='hann', start_pos=0, pad_power2=1, max
 
     delayed = np.array([time + start_time, field])
 
-    data = pad_td_right(delayed, pad_td)
+    if pad_td > 0:
+        data = pad_td_right(delayed, pad_td)
+    elif pad_td < 0:
+        data = pad_td_left(delayed, np.abs(pad_td))
+    else:
+        data = delayed
 
-    fft = do_fft(delayed, window=window, pad_power2=pad_power2)
+    fft = do_fft(data, window=window, pad_power2=pad_power2)
 
-    return delayed, fft
+    return data, fft
 
 def import_files_td_only(prefix, time, n_averages=1, posfix='.d25', max_t_bg=0.1, shift_peak=False, channel2=True):
     """
@@ -315,8 +316,13 @@ def import_files(prefix, time, n_averages=1, posfix='.d25', normalize=1, window=
 
     delayed_list = [np.array([d[0] + start_time, d[1]]) for d in data_list]
 
-    data_list = [ pad_td_right(d, pad_td) for d in delayed_list ]
-
+    if pad_td > 0:
+        data_list = [pad_td_right(d, pad_td) for d in delayed_list] 
+    elif pad_td < 0:
+        data_list = [pad_td_left(d, np.abs(pad_td)) for d in delayed_list]
+    else:
+        data_list = delayed_list
+        
 
     fft_list = [do_fft(d, window=window, pad_power2=pad_power2) for d in data_list]
 
@@ -352,18 +358,24 @@ def import_average_file(file, return_props=False, normalize=1, window='hann', st
            - fft: 2D array with 5 columns: Frequencies, FFT Amplitude, FFT Phase, FFT Amplitude error, and FFT Phase error.
            - properties: Dictionary containing metadata from the file header.
     """
-    data = np.genfromtxt(file, skip_header=1).transpose()
-    data[0] = np.abs(data[0])
-    data = back_sub(data, max_t_bg)
-    data = normalize_data(data, normalize)
+    raw_data = np.genfromtxt(file, skip_header=1).transpose()
+    raw_data[0] = np.abs(raw_data[0])
+    no_sub = back_sub(raw_data, max_t_bg)
+    data = normalize_data(no_sub, normalize)
 
     time = data[0][data[0] < max_time]
     field = data[1][data[0] < max_time]
 
     start_time = 2 * np.abs(start_pos) * 1e-3 / c / 1e-12  # in ps
 
-    data = np.array([time + start_time, field])
-    data = pad_td_right(data, pad_td)
+    delayed = np.array([time + start_time, field])
+
+    if pad_td > 0:
+        data = pad_td_right(delayed, pad_td)
+    elif pad_td < 0:
+        data = pad_td_left(delayed, np.abs(pad_td))
+    else:
+        data = delayed
 
     fft = do_fft(data, window=window, pad_power2=pad_power2)
 
@@ -496,3 +508,18 @@ def avg_err_fft_files(data_list):
         sum_array_phase += (d[2] - average[2]) ** 2
 
     return np.array([data_list[0][0], average[1], average[2], np.sqrt(sum_array_amp / (N * (N - 1))), np.sqrt(sum_array_phase / (N * (N - 1)))])
+
+
+def import_fd_file(fft_file, fft_std_file, column_names):
+    fft = pd.read_csv(fft_file, sep='\t', header=None, names=column_names).applymap(lambda x: complex(str(x)))
+    std = pd.read_csv(fft_std_file, sep='\t', header=None, names=column_names).applymap(lambda x: complex(str(x)))
+
+    amp = fft.applymap(lambda x: np.abs(x))
+    phase = fft.applymap(lambda x: -np.angle(x))
+    phase.iloc[:,0] = amp.iloc[:,0]
+
+    amp_std = std.applymap(lambda x: np.abs(x))
+    phase_std = std.applymap(lambda x: -np.angle(x))
+    phase_std.iloc[:,0] = amp_std.iloc[:,0]
+
+    return amp, phase, amp_std, phase_std

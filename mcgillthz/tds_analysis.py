@@ -51,6 +51,57 @@ def get_T_tds(ref_td, ref_fft, samp_td, samp_fft, freqs_for_fit=[2, 4], min_freq
     
     return T[:, (T[0]>min_freq) & (T[0]<max_freq)]
 
+
+
+def sig_tinkham(T, d, n, reflection=False, amp_err=None, phase_err=None):
+    """
+    Calculates the change in conductivity using Tinkham's formula for a given set of transmission/reflection amplitudes and phases.
+
+    Parameters:
+    T (ndarray): Array containing frequencies (1st column), transmission/reflection amplitude (2nd column) and phase (3rd column).
+
+    d (float): Thickness of the sample.
+    n (float or ndarray): Complex refractive index of the substrate.
+    reflection (bool, optional): If true, assumes the experiment was performed in reflection geometry. If falses, assumes it's in transmission.
+
+    Returns:
+    sig (ndarray): Array containing the complex conductivity.
+    """
+
+    amp = T[1]
+    phase = T[2]
+
+    if reflection:
+        R = amp * np.exp(1j*phase)
+        sig = (1 - n**2) * (1-R) / (Z0 * d * ( (1+R) + n*(1-R) ))       
+    else:
+        T = amp * np.exp(1j*phase)
+        sig = (1 + n)/(Z0*d) * (1/T - 1)
+
+    if (amp_err is not None) and (phase_err is not None):
+        sig1 = np.real(sig)
+        sig2 = np.imag(sig)
+        if reflection:
+            F = 1 + 2*np.real(n) + n**2 + 2*amp*(np.cos(phase)*(1 - n**2) + 2*np.sin(phase)*np.imag(n)) + amp**2 * (1 - 2*np.real(n) + n**2)
+            dFdR = 2*(np.cos(phase)*(1 - n**2) + 2*np.sin(phase)*np.imag(n)) + 2*amp*(1 - 2*np.real(n) + n**2)
+            dFdphase = 2*np.cos(phase)*np.imag(n) - 2*amp*np.sin(phase)*(1-n**2)
+
+            sig1_err_sqr = ((1-n**2)/(Z0*d) * -2 *(amp*(1 - np.conj(n)) + np.conj(n)*np.cos(phase)  )/F - sig1*dFdR/F)**2 * amp_err**2 + \
+                                ((1-n**2)/(Z0*d) * 2*np.conj(n)*amp*np.sin(phase)/F  - sig1 * dFdphase/F   )**2 * phase_err**2
+
+            sig2_err_sqr = ((1-n**2)/(Z0*d) * -2 *np.sin(phase)/F - sig2*dFdR/F)**2 * amp_err**2 + \
+                                ((1-n**2)/(Z0*d) * -2*amp*np.cos(phase)/F  - sig2 * dFdphase/F   )**2 * phase_err**2
+
+            sig_err = np.sqrt(sig1_err_sqr) + 1J*np.sqrt(sig2_err_sqr)
+        else:
+            raise ValueError('Error propagation in transmission not implemented.')   
+
+        return sig, sig_err
+    else:
+        return sig
+
+
+
 def error_function(n_til, freq, T_function, T_function_pars, exp_amp, exp_phase):
     """
     Compute the error between the experimental and theoretical transmission functions.

@@ -18,11 +18,46 @@ def pad_to_power2(data, power_of_2=14):
     ndarray: Padded data array.
     """
     N0 = len(data)
-    N_pad = int((2**power_of_2 - N0) / 2)
+    N_pad = (2**power_of_2 - N0) 
 
-    pad_data = np.append(np.zeros(N_pad), np.append(data, np.zeros(N_pad)))
+    pad_data = np.append(data, np.zeros(N_pad))
 
     return pad_data
+
+def get_asym_window(window, length, p_function=None):
+    """
+        Generate an asymmetric window using modulation of a symmetric window. Follows https://doi.org/10.1260/1748-3018.9.4.389
+        
+        Parameters:
+            window (str): Name of the window.
+            length (int): Total number of points in the window.
+            p_function (function): A monotonic function that modulates the symmetric window. 
+        
+        Returns:
+            np.ndarray: Asymmetric window.
+        """
+    def asymmetric_window(length, p_t):
+        x = np.linspace(0, 1, length)
+        modulated_x = p_t(x)  # Apply modulation function
+        modulated_x = np.clip(modulated_x, 0, 1)  # Ensure values stay within [0,1]
+        asymmetric_w = 0.5 * (1 - np.cos(2 * np.pi * modulated_x))  # Generate asymmetric hann window
+        return asymmetric_w
+    
+    if window == 'hann-sin':
+        p = lambda t: np.sin(np.pi * t / 2)
+        w = asymmetric_window(length, p)
+    elif window == 'hann-log':
+        p = lambda t: np.log(t + 1)/np.log(2)
+        w = asymmetric_window(length, p)
+    else:
+        if p_function is not None:
+            w = asymmetric_window(length, p_function)
+        else:
+            w = get_window(window, length, fftbins=False)
+    
+    return w
+
+
 
 def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1, inverse=False):
     """
@@ -30,7 +65,7 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1,
 
     Parameters:
     data (ndarray): 2D array with time data in data[0] and corresponding values in data[1].
-    window (str): Window function to apply to the data.
+    window (str): Window function to apply to the data. scipy.get_window() or custom windows: 'hann-sin', 'hann-log'.
     min_time (float): Minimum time for FFT.
     max_time (float): Maximum time for FFT.
     pad_power2 (int): Power of 2 to pad the data to. If number is smaller than the current length, pads until the next power of 2, 
@@ -45,37 +80,27 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1,
     E = data[1][mask]
     dt = abs(t[1] - t[0])
     
-    peak_ind = np.argmax(E)
-    N_right = len(E) - peak_ind
-    N_pad = N_right - peak_ind
-
-    # Pads to the left or right to make the window centered on the peak
-    if N_pad > 0:
-        new_E = np.append(np.zeros(N_pad), E)   
-    else:
-        new_E = np.append(E, np.zeros(np.abs(N_pad)))
-
-    w = get_window(window, len(new_E), fftbins=False)
+    w = get_asym_window(window, len(E)) #* np.sin(np.pi * np.range(N)/2)
     
-    if 2**pad_power2 < len(new_E):
-        pad_power2 = int(np.log2(len(new_E))) + 1
-
+    if 2**pad_power2 < len(E):
+        pad_power2 = int(np.log2(len(E))) + 1
+    
     # Pads
-    E = pad_to_power2(new_E, power_of_2=pad_power2)
+    E_pad = pad_to_power2(E, power_of_2=pad_power2)
     w = pad_to_power2(w, power_of_2=pad_power2)
+    N = len(E_pad)
 
-    N = len(E)
 
     if inverse:
-        fft_result = irfft(E * w, len(E))
+        fft_result = irfft(E_pad * w, N)
 
         Fs = np.max(t)
-        fft_freq = np.arange(0, len(E)/Fs, 1/Fs)
+        fft_freq = np.arange(0, len(E_pad)/Fs, 1/Fs)
     else:
-        fft_result = rfft(E * w)
+        fft_result = rfft(E_pad * w)
         fft_freq = rfftfreq(N, dt)
 
-
+ 
 
     fft_amp = np.abs(fft_result)
 
@@ -83,6 +108,7 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1,
     
 
     return np.array([fft_freq, fft_amp, fft_phase])
+
 
 
 def do_fft_2d(data_df, window='Hann', min_time=-np.inf, max_time=np.inf, inverse=False, pad_power2=1):   

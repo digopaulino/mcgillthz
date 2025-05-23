@@ -13,6 +13,7 @@ def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_
                ref_amp_std=None, ref_phase_std=None, pump_amp_std=None, pump_phase_std=None):
     """
     Calculates the transmission or reflection amplitude and phase using reference and pumped data. 
+    TO-DO: Remove ref_df and pump_df.
 
     Parameters:
     ref_df (DataFrame): DataFrame containing reference data, where the first column is frequency and subsequent
@@ -40,40 +41,46 @@ def get_T_trts(ref_df, ref_amp, ref_phase, pump_df, pump_amp, pump_phase, freqs_
         T_std_df = pd.DataFrame()
         phase_std_df = pd.DataFrame()
 
-        for i, time in enumerate(ref_df.columns[1:]):
-            ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time], ref_amp_std[time], ref_phase_std[time]])
-            pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time], pump_amp_std[time], pump_phase_std[time]])
-            T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
+        for i, time in enumerate(ref_amp.columns[1:]):
+            T_amp = pump_amp[time] / ref_amp[time]
+            T_phase_raw = np.unwrap(  pump_phase[time] - ref_phase[time]  )
 
-            T_df.insert(i, time, T[1], True)
-            phase_df.insert(i, time, T[2], True)
-            T_std_df.insert(i, time, T[3], True)
-            phase_std_df.insert(i, time, T[3], True)
+            # Remove 2pi offset
+            mask = (ref_amp.iloc[:,0] > freqs_for_fit[0]) & (ref_amp.iloc[:,0] < freqs_for_fit[1])
+            pars, _ = curve_fit(lambda x, a, b: a * x + b, ref_amp.iloc[:,0][mask], T_phase_raw[mask])    # Fit phase to a linear function to remove offset
+            T_phase = T_phase_raw - 2 * np.pi * round(pars[1] / (2 * np.pi))
 
-        T_df.insert(0, 'freq', T[0], True)
-        phase_df.insert(0, 'freq', T[0], True)
-        T_std_df.insert(0, 'freq', T[0], True)
-        phase_std_df.insert(0, 'freq', T[0], True)
+            T_amp_std = T_amp * np.sqrt((pump_amp_std[time] / pump_amp[time])**2 + (ref_amp_std[time] / ref_amp[time])**2)
+            T_phase_std = np.sqrt(pump_phase_std[time]**2 + ref_phase_std[time]**2)
+
+            T_df.insert(i, time, T_amp, True)
+            phase_df.insert(i, time, T_phase, True)
+            T_std_df.insert(i, time, T_amp_std, True)
+            phase_std_df.insert(i, time, T_phase_std, True)
+
+        T_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
+        phase_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
+        T_std_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
+        phase_std_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
 
         return T_df, phase_df, T_std_df, phase_std_df
 
     else:
-        for i, time in enumerate(ref_df.columns[1:]):
-            ref_fft_array   = np.array([ref_amp.iloc[:,0], ref_amp[time], ref_phase[time]])
-            pump_fft_array  = np.array([pump_amp.iloc[:,0], pump_amp[time], pump_phase[time]])
-            T = get_T_tds(pdnp(ref_df, time), ref_fft_array, pdnp(pump_df, time), pump_fft_array, freqs_for_fit=freqs_for_fit)
+        for i, time in enumerate(ref_amp.columns[1:]):
+            T_amp = pump_amp[time] / ref_amp[time]
+            T_phase = np.unwrap(  pump_phase[time] - ref_phase[time]  )
 
-            T_df.insert(i, time, T[1], True)
-            phase_df.insert(i, time, T[2], True)
-    
-        T_df.insert(0, 'freq', T[0], True)
-        phase_df.insert(0, 'freq', T[0], True)
+            T_df.insert(i, time, T_amp, True)
+            phase_df.insert(i, time, T_phase, True)
+
+        T_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
+        phase_df.insert(0, 'freq', ref_amp.iloc[:,0], True)
 
         return T_df, phase_df
 
 
 
-def sig_tinkham_all(Amps, Phases, d, n, reflection=False):
+def sig_tinkham_all(Amps, Phases, d, n, reflection=False, Amps_err=None, Phases_err=None):
     """
     Calculates the change in conductivity using Tinkham's formula for a given set of transmission amplitudes and phases.
 
@@ -106,7 +113,40 @@ def sig_tinkham_all(Amps, Phases, d, n, reflection=False):
 
     dsig_df.insert(0, 'freq', freqs, True)
 
-    return dsig_df
+    if (Amps_err is not None) and (Phases_err is not None):
+        dsig_err_df = pd.DataFrame()
+        for i, time in enumerate(Amps.columns[1:]):
+            amp = Amps[time]
+            phase = Phases[time]
+            amp_err = Amps_err[time]
+            phase_err = Phases_err[time]
+            sig1 = np.real(dsig_df[time])
+            sig2 = np.imag(dsig_df[time])
+            
+            if reflection:  
+                F = 1 + 2*np.real(n) + n**2 + 2*amp*(np.cos(phase)*(1 - n**2) + 2*np.sin(phase)*np.imag(n)) + amp**2 * (1 - 2*np.real(n) + n**2)
+                dFdR = 2*(np.cos(phase)*(1 - n**2) + 2*np.sin(phase)*np.imag(n)) + 2*amp*(1 - 2*np.real(n) + n**2)
+                dFdphase = 2*np.cos(phase)*np.imag(n) - 2*amp*np.sin(phase)*(1-n**2)
+
+                sig1_err_sqr = ((1-n**2)/(Z0*d) * -2 *(amp*(1 - np.conj(n)) + np.conj(n)*np.cos(phase)  )/F - sig1*dFdR/F)**2 * amp_err**2 + \
+                                    ((1-n**2)/(Z0*d) * 2*np.conj(n)*amp*np.sin(phase)/F  - sig1 * dFdphase/F   )**2 * phase_err**2
+
+                sig2_err_sqr = ((1-n**2)/(Z0*d) * -2 *np.sin(phase)/F - sig2*dFdR/F)**2 * amp_err**2 + \
+                                    ((1-n**2)/(Z0*d) * -2*amp*np.cos(phase)/F  - sig2 * dFdphase/F   )**2 * phase_err**2
+
+                sig_err = np.sqrt(sig1_err_sqr) + 1J*np.sqrt(sig2_err_sqr)
+
+            else:
+                raise ValueError('Error propagation in transmission not implemented.')   
+
+            dsig_err_df.insert(i, time, sig_err, True)
+        
+        dsig_err_df.insert(0, 'freq', freqs, True)
+        
+        return dsig_df, dsig_err_df
+
+    else:
+        return dsig_df
 
 
 

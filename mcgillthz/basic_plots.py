@@ -72,7 +72,7 @@ def plot_spectrum(data, fft, axs=None, color='black', label=None, normalize=1, l
         fig, axs = plt.subplots(ncols=2, figsize=(16, 6), dpi=dpi)
 
     if normalize == 0:
-        norm_t = data[1].max()
+        norm_t = np.abs(data[1]).max()
         axs[0].set_ylabel('Normalized Electric Field (a.u.)')
     elif normalize == 1:
         norm_t = 1
@@ -368,6 +368,8 @@ def autoscale_y(ax, margin=0.1):
         return bot, top
 
     lines = ax.get_lines()
+    if lines is list: lines = lines[0]
+    
     bot, top = np.inf, -np.inf
 
     for line in lines:
@@ -510,6 +512,10 @@ def plot_transmission_slider(T_amp, T_phase, fig=None, axs=None, slider=None, co
         axs[0].set_ylim(-1, 1.5)
         axs[1].set_ylim(-3.14, 3.14)
     
+    axs[0].set_xlabel('Frequency (THz)')
+    axs[1].set_xlabel('Frequency (THz)')
+    axs[1].set_ylabel(r'$\phi$ (rad.)')
+
     def update(change):
         line1.set_ydata(T_amp[change.new] - sub)    # Update the lines
         line2.set_ydata(T_phase[change.new])
@@ -653,7 +659,7 @@ def plot_transmission_colormesh(T_amp, T_phase, N=5, max_tau=5, subtract_one=Fal
     return fig, axs
 
 
-def plot_slider(data, fig=None, ax=None, color='black', fix_y=False, norm=1, add_array=None, linestyle='-', label=''):
+def plot_slider(data, fig=None, ax=None, color='black', fix_y=False, norm=1, add_array=None, linestyle='-', label='', slider=None):
     """
     Creates a plot with a slider to visualize data at different time delays (tau values).
 
@@ -681,13 +687,14 @@ def plot_slider(data, fig=None, ax=None, color='black', fix_y=False, norm=1, add
     
     # Extract tau values from the columns of the DataFrame
     taus = data.columns[1:].values
-    slider = ipw.widgets.SelectionSlider(
-        options=taus,
-        value=taus[0],
-        description='tau (ps)',
-        disabled=False,
-        readout=True
-    )
+    if slider is None:
+        slider = ipw.widgets.SelectionSlider(
+            options=taus,
+            value=taus[0],
+            description='tau (ps)',
+            disabled=False,
+            readout=True
+        )
 
     # Plot the initial data
     line, = ax.plot(data.iloc[:,0], (data[taus[0]] + add_array) / norm, color=color, linestyle=linestyle, label=label)
@@ -926,7 +933,7 @@ def plot_multiple_slider(datas, colors, linestyles, labels, fig=None, ax=None, f
     
     
 def plot_complex_slider(data_c, fig, ax, fix_y=False, norm=1, add_array=None, linestyle='-', \
-                        label='', ylabel=r'$\tilde{\sigma}$ (S/m)'):
+                        label='', ylabel=r'$\tilde{\sigma}$ (S/m)', data_std=None, alpha_std=0.2):
     """
     Plots the real and imaginary parts of complex data with a slider for adjusting the time delay (tau) 
     and updates the plot interactively.
@@ -962,6 +969,12 @@ def plot_complex_slider(data_c, fig, ax, fix_y=False, norm=1, add_array=None, li
     line1, = ax.plot(data_c.iloc[:,0], np.real(data_c[taus[0]] + add_array)/norm, color='red', label=label, linestyle=linestyle)
     line2, = ax.plot(data_c.iloc[:,0], np.imag(data_c[taus[0]] + add_array)/norm, color='blue', linestyle=linestyle)
 
+    if data_std is not None:
+        fill1 = ax.fill_between(data_std.iloc[:,0], np.real(data_c[taus[0]] - data_std[taus[0]] + add_array)/norm, 
+                                    np.real(data_c[taus[0]] + data_std[taus[0]] + add_array)/norm, color='red', alpha=alpha_std)
+        fill2 = ax.fill_between(data_std.iloc[:,0], np.imag(data_c[taus[0]] - data_std[taus[0]] + add_array)/norm, 
+                                    np.imag(data_c[taus[0]] + data_std[taus[0]] + add_array)/norm, color='blue', alpha=alpha_std)
+
     ax.set_ylabel(ylabel)
     ax.set_xlabel('Frequency (THz)')
 
@@ -970,6 +983,17 @@ def plot_complex_slider(data_c, fig, ax, fix_y=False, norm=1, add_array=None, li
         line2.set_ydata(np.imag(data_c[change.new] + add_array)/norm)
         if not fix_y: autoscale_y(ax)
         fig.canvas.draw_idle()
+
+        if data_std is not None:                   # Update the fill_between
+            nonlocal fill1, fill2
+
+            fill1.remove()  # Remove previous fill1 and fill2
+            fill2.remove()
+            
+            fill1 = ax.fill_between(data_std.iloc[:,0], np.real(data_c[change.new] - data_std[change.new] + add_array)/norm, 
+                                    np.real(data_c[change.new] + data_std[change.new] + add_array)/norm, color='red', alpha=alpha_std)
+            fill2 = ax.fill_between(data_std.iloc[:,0], np.imag(data_c[change.new] - data_std[change.new] + add_array)/norm, 
+                                    np.imag(data_c[change.new] + data_std[change.new] + add_array)/norm, color='blue', alpha=alpha_std)
     
     slider.observe(update, 'value')
 

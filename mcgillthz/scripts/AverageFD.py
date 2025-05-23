@@ -2,18 +2,22 @@
 To run this code, copy it in the folder with all data files. Change the values below accordingly.
 NOTE: calculate_std not implemented
 """
-max_t_bg = 0.1          # Time range at which a background offset will be subtracted
+max_t_bg = 0.3          # Time range at which a background offset will be subtracted
+fft_window  = ('tukey', 0.6) # Window function to apply to the data.
+power_of_2 = 1         # Power of 2 the data will be padded before FFT 
 posfix = '.d25'         # Posfix of the data files. Usually .d25, .d24, etc...
 multiply_ch1 = 1/100    # I was reading in 0.1 V scale
 multiply_ch2 = 1/100
 ref_sign = '-'          # Signal used to obtain E_ref from E1 and E2. If '-', then E_ref = E1 - E2
-fft_window  = 'hann'    # Window function to apply to the data.
-power_of_2 = 10         # Power of 2 the data will be padded before FFT 
+subt_phase_offs = True  # If true, substracts 2pi phase offsets
+subt_phase_freqs = [1.5, 3]   # Frequency region to perform fit for phase offset correction. Stay away from resonances.
+
 
 import os
 import numpy as np                              # type: ignore
 from scipy.fft import rfft, rfftfreq, irfft     # type: ignore
 from scipy.signal.windows import get_window     # type: ignore
+from scipy.optimize import curve_fit            # type: ignore
 import time
 from datetime import datetime
 
@@ -63,23 +67,33 @@ def get_n_averages(filename):
     avgs = first_line.split('Averages: ')[1].split(' -')[0]
     return int(avgs)
 
+
+def complex_std(a, x_values=None, ddof=1, axis=None):
+    """
+    Calculates the standard error for the real and imaginary parts of an array of complex values.
+    If subt_phase_offs is True, it subtracts the 2pi offset before calculating.
+    """
+    global subt_phase_offs, subt_phase_freqs
+
+    amp = np.abs(a)
+    angle = np.unwrap(np.angle(a), axis=axis)
+
+    if subt_phase_offs and (x_values is not None):
+        mask = (x_values > subt_phase_freqs[0]) & (x_values < subt_phase_freqs[1])
+        for i in range(len(a)):
+            pars, _ = curve_fit(lambda x, a, b: a * x + b, x_values[mask], angle[i][mask])
+            angle[i] = angle[i] - 2 * np.pi * round(pars[1] / (2 * np.pi))
+
+
+    std_amp = np.std(amp, ddof=ddof, axis=axis)
+    std_angle = np.std(angle, ddof=ddof, axis=axis)
+
+    return std_amp * np.exp(-1j*std_angle)
+
+
 def back_sub(data):
     """
     Subtracts the background from the data based on the average before the peak.
-
-    Parameters:
-    data (np.ndarray): A 2D array where:
-                       - data[0] contains the time values.
-                       - data[1] contains the field values.
-                       - data[2] contains additional field values at another chopping frequency.
-    max_t_bg (float): Maximum time (in the same units as data[0]) to consider for background subtraction.
-                      All field values within this time range are averaged to calculate the background.
-
-    Returns:
-    np.ndarray: A 2D array where:
-                - The first row is the time values (unchanged).
-                - The second row is the field values with the background subtracted.
-                - The third row contains the original field values in data[2].
     """
     mask = (data[0] < max_t_bg)
     bg = np.mean(data[1][mask])
@@ -88,37 +102,59 @@ def back_sub(data):
     else:
         return np.array([data[0], data[1], data[2]])
 
-def pad_to_power2(E, power):
-    N0 = len(E)
-    N_pad = int((2**power - N0) / 2)
+def get_asym_window(window, length, p_function=None):
+    """
+        Generate an asymmetric window using modulation of a symmetric window. Follows DOI: 10.1109/ICASSP.1991.150149.
+        If the input window is not one of the pre-coded asymetric ones, it uses the scipy.signal.get_window() function.
+    
+        """
+    def asymmetric_window(length, p_t):
+        x = np.linspace(0, 1, length)
+        modulated_x = p_t(x)  # Apply modulation function
+        modulated_x = np.clip(modulated_x, 0, 1)  # Ensure values stay within [0,1]
+        asymmetric_w = 0.5 * (1 - np.cos(2 * np.pi * modulated_x))  # Generate asymmetric hann window
+        return asymmetric_w
+    
+    if window == 'hann-sin':        # Asymmetric window w/ peak at 0.33
+        p = lambda t: np.sin(np.pi * t / 2)
+        w = asymmetric_window(length, p)
+    elif window == 'hann-log':      # Asymmetric window w/ peak at 0.42
+        p = lambda t: np.log(t + 1)/np.log(2)
+        w = asymmetric_window(length, p)
+    else:
+        if p_function is not None:
+            w = asymmetric_window(length, p_function)
+        else:
+            w = get_window(window, length, fftbins=False)
+    
+    return w
 
-    pad_data = np.append(np.zeros(N_pad), np.append(E, np.zeros(N_pad)))
+
+def pad_to_power2(data, power_of_2=14):
+    """
+    Pads an array until the power of 2 determined.
+    """
+    N0 = len(data)
+    N_pad = (2**power_of_2 - N0) 
+
+    pad_data = np.append(data, np.zeros(N_pad))
 
     return pad_data
 
 def center_and_pad(data):
-    global power_of_2
+    """
+    Pads the data and the window.
+    """
+    global power_of_2, fft_window
 
-    peak_ind = np.argmax(data[1])
-    N_right = len(data[1]) - peak_ind
-    N_pad = N_right - peak_ind
-
-    # Pads to the left or right to make the window centered on the peak
-    if N_pad > 0:
-        new_E1 = np.append(np.zeros(N_pad), data[1])
-        new_E2 = np.append(np.zeros(N_pad), data[2])   
-    else:
-        new_E1 = np.append(data[1], np.zeros(np.abs(N_pad)))
-        new_E2 = np.append(data[2], np.zeros(np.abs(N_pad)))
-
-    w = get_window(fft_window, len(new_E1), fftbins=False)
+    w = get_asym_window(fft_window, len(data[1]))
     
-    if 2**power_of_2 < len(new_E1):
-        power_of_2 = int(np.log2(len(new_E1))) + 1
+    if 2**power_of_2 < len(data[1]):
+        power_of_2 = int(np.log2(len(data[1]))) + 1
     
     # Pads
-    E1 = pad_to_power2(new_E1, power_of_2)
-    E2 = pad_to_power2(new_E2, power_of_2)
+    E1 = pad_to_power2(data[1], power_of_2)
+    E2 = pad_to_power2(data[2], power_of_2)
     w = pad_to_power2(w, power_of_2)
 
     return np.array([E1, E2, w])
@@ -128,17 +164,6 @@ def center_and_pad(data):
 def fourier_transform(time, E1, E2, window=None):
         """
         Calculates the Fourier transform of time-domain data.
-
-        Parameters:
-        data (np.ndarray): A 2D array where:
-                       - data[0] contains the time values.
-                       - data[1] contains the field values.
-                       - data[2] contains additional field values at another chopping frequency.
-        Returns:
-        np.ndarray: A 2D array where:
-                - The first row is the frequency in THz.
-                - The second row is the complex Fourier transform of data[1].
-                - The third row is the complex Fourier transform of data[2].
         """
         if window is None:
             window = np.ones(len(E1))
@@ -154,30 +179,11 @@ def fourier_transform(time, E1, E2, window=None):
 
 
 
-
 def averagefd_returntd(raw_list, ref_sign=ref_sign):
     """
-    Imports, processes, and averages multiple time-domain data files in the Fourier domain.
+    Imports, processes, and averages multiple time-domain data files in the Fourier domain, and returns the averaged time-domain data.
+    Processes them by performing background subtraction, calculating the Fourier transform, averaging the FT, and returns the inverse FT. 
 
-    This function reads multiple time-domain data files with a specified prefix and time, processes them by 
-    performing background subtraction, calculating the Fourier transform, averaging the FT, and returns the inverse FT. 
-
-    Parameters:
-    prefix (str): Prefix for the file names (e.g. "UBB Jan16 "). The files are expected to be sequentially numbered. 
-    time (float): Starting time associated with the first file.
-    n_averages (int): Number of files to average. The function stops once this many files have been successfully processed.
-    posfix (str): File extension (e.g., '.d25') for the data files.
-    max_t_bg (float, optional): Maximum time (in ps) for background subtraction. Any signal before this time is treated as background.
-    ref_sign (str): Determines what signal is used to transform from E1 and E2 to E_pump and E_ref. Values are:
-                    '-': E_ref = E1 - E2, E_pump = E1 + E2
-                    '+': E_ref = E1 + E2, E_pump = E1 - E2
-                    '0' or '': E_ref = E1, E_pump = E2
-    multiply_ch1 (float): Constant factor to multiply data in channel 1.
-    multiply_ch2 (float): Constant factor to multiply data in channel 2.
-
-    Returns:
-        E_a: Time domain value of the electric field.
-        E_b: Time domain value of the additional electric field.
     """
 
     # Substracts background
@@ -207,27 +213,8 @@ def averagefd_returntd(raw_list, ref_sign=ref_sign):
 
 def averagefd_returnfd(raw_list):
     """
-    Imports, processes, and averages multiple time-domain data files in the Fourier domain.
-
-    This function reads multiple time-domain data files with a specified prefix and time, processes them by 
-    performing background subtraction, calculating the Fourier transform, averaging the FT, and returns the inverse FT. 
-
-    Parameters:
-    prefix (str): Prefix for the file names (e.g. "UBB Jan16 "). The files are expected to be sequentially numbered. 
-    time (float): Starting time associated with the first file.
-    n_averages (int): Number of files to average. The function stops once this many files have been successfully processed.
-    posfix (str): File extension (e.g., '.d25') for the data files.
-    max_t_bg (float, optional): Maximum time (in ps) for background subtraction. Any signal before this time is treated as background.
-    ref_sign (str): Determines what signal is used to transform from E1 and E2 to E_pump and E_ref. Values are:
-                    '-': E_ref = E1 - E2, E_pump = E1 + E2
-                    '+': E_ref = E1 + E2, E_pump = E1 - E2
-                    '0' or '': E_ref = E1, E_pump = E2
-    multiply_ch1 (float): Constant factor to multiply data in channel 1.
-    multiply_ch2 (float): Constant factor to multiply data in channel 2.
-
-    Returns:
-        E_a: Time domain value of the electric field.
-        E_b: Time domain value of the additional electric field.
+    Imports, processes, and averages multiple time-domain data files in the Fourier domain. Returns the data in the Fourier domain with
+    it's standard error as well.
     """
 
     # Substracts background
@@ -243,21 +230,21 @@ def averagefd_returnfd(raw_list):
     else:
         raise ValueError("Invalid ref_sign. Use '-', '+' or '0'.")
     
-    cnt_pad_list = [center_and_pad(d) for d in data_list]
-    fft_list = np.array([ fourier_transform(data_list[0][0], d[0], d[1], window=d[2]) for d in cnt_pad_list])
+    pad_list = [center_and_pad(d) for d in data_list]
+    fft_list = np.array([ fourier_transform(data_list[0][0], d[0], d[1], window=d[2]) for d in pad_list])
 
     fft_freq = fft_list[0][0]                       # Calculate amplitude and angle before doing the statistics
     fft_a_avg = np.mean(fft_list[:,1], axis=0)
     fft_b_avg = np.mean(fft_list[:,2], axis=0)
 
-    fft_a_std = np.std(fft_list[:,1], axis=0, ddof=1) / np.sqrt(len(fft_list))      # Standard error, instead of standard deviation
-    fft_b_std = np.std(fft_list[:,2], axis=0, ddof=1) / np.sqrt(len(fft_list))
+    fft_a_std = complex_std(fft_list[:,1], axis=0, ddof=1, x_values=fft_freq) / np.sqrt(len(fft_list))      # Standard error, instead of standard deviation
+    fft_b_std = complex_std(fft_list[:,2], axis=0, ddof=1, x_values=fft_freq) / np.sqrt(len(fft_list))
 
     return fft_freq, fft_a_avg, fft_b_avg, fft_a_std, fft_b_std
 
 def open_files(filedir, filenames):
     """
-    Opens files and creates E1 and E2 2D matrix and Pumpindex .dat files.
+    Opens all files and processes them. Creates the outputed files.
     """
     start_time = time.time()
     n_avgs = get_n_averages(os.path.join(filedir, filenames[0]))

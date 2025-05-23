@@ -202,26 +202,6 @@ def loss_from_n(n):
 
 
 
-def sig_tinkham(amp, phase, d, n_sub, reflection=False):
-    """
-    Computes the conductivity from amplitude and phase using Tinkham's approximation.
-
-    Parameters:
-    amp (ndarray): Transmission amplitude.
-    phase (ndarray): Transmission phase.
-    d (float): Thickness of the material.
-    n_sub (float or ndarray): Refractive index of the substrate.
-    reflection (bool): If true, assumes the experiment was performed in reflection geometry. If falses, assumes it's in transmission.
-
-    Returns:
-    ndarray: Conductivity in S/m.
-    """
-    if reflection:
-        R = amp * np.exp(1j * phase)
-        return (1 - n_sub**2) * (1 - R) / (Z0 * d * ((1 + R) + n_sub * (1 - R)))
-    else:
-        return (n_sub + 1) / (Z0 * d) * (1 / (amp * np.exp(1j * phase)) - 1)
-
 
 def n_from_sig_all(sig_df, eps_inf=1, mu=1, sig_eq=None):
     """
@@ -297,4 +277,11 @@ def n_thick_transp(freq, amp, phase, d, nsub=1):
 
     return n + 1j*kappa
 
+def complex_std(a, ddof=1, axis=None):
+    a_r = np.real(a)
+    a_i = np.imag(a)
 
+    std_r = np.std(a_r, ddof=ddof, axis=axis)
+    std_i = np.std(a_i, ddof=ddof, axis=axis)
+
+    return std_r + 1J*std_i
