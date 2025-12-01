@@ -4,6 +4,7 @@ import matplotlib.cm as cm          # type: ignore
 from matplotlib import cycler        # type: ignore
 import ipywidgets as ipw            # type: ignore
 from scipy.interpolate import interpn       # type: ignore
+from matplotlib.widgets import Slider       # type: ignore
 
 from .fft_utils import *
 from .import_utils import *
@@ -161,7 +162,7 @@ def plot_spectrum_slider(data, fft, axs=None, fig=None, slider=None, color='blac
     max_1 = data.iloc[:,1:].max().max()/norm_t
     min_1 = data.iloc[:,1:].min().min()/norm_t
     axs[0].set_ylim(min_1, max_1)
-    axs[0].set_xlim(0, data.iloc[:,0].max())
+    axs[0].set_xlim(data.iloc[:,0].min(), data.iloc[:,0].max())
     def update(change):
         line1.set_ydata(data[change.new]/norm_t)
         line2.set_ydata(fft[change.new])

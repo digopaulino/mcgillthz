@@ -111,7 +111,7 @@ def do_fft(data, window='hann', min_time=-np.inf, max_time=np.inf, pad_power2=1,
 
 
 
-def do_fft_2d(data_df, window='Hann', min_time=-np.inf, max_time=np.inf, inverse=False, pad_power2=1):   
+def do_fft_all_taus(data_df, window='Hann', min_time=-np.inf, max_time=np.inf, inverse=False, pad_power2=1):   
     """
     Applies FFT (Fast Fourier Transform) to all columns of a pandas DataFrame.
 

@@ -82,12 +82,17 @@ def back_sub(data, max_t_bg=0.1, channel2=False):
     """
     mask = (data[0] < max_t_bg)
     bg = np.mean(data[1][mask])
-
-    if channel2:
-        return np.array([data[0], data[1] - bg, data[2]])
+    
+    if not np.isnan(bg): 
+        if channel2:
+            return np.array([data[0], data[1] - bg, data[2]])
+        else:
+            return np.array([data[0], data[1] - bg, bg * np.ones(len(data[0]))])
     else:
-        return np.array([data[0], data[1] - bg, bg * np.ones(len(data[0]))])
-
+        if channel2:
+            return np.array([data[0], data[1], data[2]])
+        else:
+            return np.array([data[0], data[1], np.zeros(len(data[0]))])
 
 def pad_td_right(data, n_points, channel2=False):
     """
@@ -264,8 +269,9 @@ def import_files_td_only(prefix, time, n_averages=1, posfix='.d25', max_t_bg=0.1
         if i > 100:
             print(f'File not found. Last tried was {file}')
             break
-
+    
     data_list = [back_sub(raw_data, max_t_bg, channel2) for raw_data in raw_list]
+    
 
     if shift_peak:
         peak_ind = np.argmax(data_list[0][1])

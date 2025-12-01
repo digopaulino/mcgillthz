@@ -6,8 +6,8 @@ max_t_bg = 0.3          # Time range at which a background offset will be subtra
 fft_window  = ('tukey', 0.6) # Window function to apply to the data.
 power_of_2 = 1         # Power of 2 the data will be padded before FFT 
 posfix = '.d25'         # Posfix of the data files. Usually .d25, .d24, etc...
-multiply_ch1 = 1/100    # I was reading in 0.1 V scale
-multiply_ch2 = 1/100
+multiply_ch1 = 1/100    # I was reading in 0.1 V scale on the LIA
+multiply_ch2 = 1/100    
 ref_sign = '-'          # Signal used to obtain E_ref from E1 and E2. If '-', then E_ref = E1 - E2
 subt_phase_offs = True  # If true, substracts 2pi phase offsets
 subt_phase_freqs = [1.5, 3]   # Frequency region to perform fit for phase offset correction. Stay away from resonances.
@@ -183,7 +183,7 @@ def averagefd_returntd(raw_list, ref_sign=ref_sign):
     """
     Imports, processes, and averages multiple time-domain data files in the Fourier domain, and returns the averaged time-domain data.
     Processes them by performing background subtraction, calculating the Fourier transform, averaging the FT, and returns the inverse FT. 
-
+    Does not return the standard deviation in this case.
     """
 
     # Substracts background
