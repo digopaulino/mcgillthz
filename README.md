@@ -14,7 +14,7 @@ The following packages must also be installed:
 - PyWavelets (optional) - Does continous wavelet transforms.
 - ipympl (optional) - Allows for iterative plots on a jupyter notebook.
 <!-- - lmfit - Wraps scipy.optimize to allow for easier manipulation of the parameters. Very useful for fitting optical functions with many parameters. -->
-
+- Streamlit, Plotly (optional) - Necessary for all GUIs.
 
 
 # File Tree
@@ -27,9 +27,11 @@ In the *mcgillthz/* folder, the separate files are organized as follows:
 - tds_analysis.py - All functions needed for time-domain spectroscopy, from determining the amplitude and phase of the transmission coefficiet, to numerically find the complex refractive index.
 - trts_analysis.py - All functions needed for 2d time-resolved THz spectroscopy
 - basic_plots.py - Basic functions to do quick standard plots and some iterative plots, including 2d color plots and plots with a slider to help visualizing different pump-probe time delays.
+- twodim_analysis.py - All functions and classes needed to do 2D coherent THz spectroscopy.
 
 The *tutorials/* folder contain Jupyter notebooks with all the essential steps for analyzing TDS and 2D TRTS data. 
 
+The *GUIs/* folder contain GUIs (and scripts to run them natively) using Streamlit and the functions defined in the mcgillthz/ folder. Right now, this is mostly focused in the 2D coherent THz spectroscopy.
 
 # To-Do:
 

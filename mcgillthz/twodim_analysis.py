@@ -233,7 +233,7 @@ def cosine_taper_window(M, flat_start, flat_end, rise_start=0, fall_end=None):
 
 
 
-def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min_tau=-np.inf, max_tau=np.inf):
+def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min_tau=-np.inf, max_tau=np.inf, min_time=-np.inf, max_time=np.inf):
     """
     Applies a 2D window to spectroscopy data using a standard window for the probe axis
     and a variable-support cosine taper for the delay axis.
@@ -266,6 +266,13 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
         The delay time (tau) where the window finishes decaying to 0.
         Data corresponding to tau > max_tau will be zeroed out.
         Default is inf (uses the last index).
+    min_time : float, optional
+        The minimum probe time to be included in the window.
+        Default is the minimum time in the dataset.
+    max_time : float, optional
+        The maximum probe time to be included in the window.
+        Default is the maximum time in the dataset.
+
 
     Returns
     -------
@@ -282,7 +289,18 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
     taus = df.columns[1:].astype(float)
     data = df.drop(columns='time').values
 
-    x_window = get_window(t_window, len(ts))
+    # 1. Probe Time (t) Window
+    min_time_ind = 0 if np.isinf(min_time) else np.argmin(np.abs(ts - min_time))
+    max_time_ind = len(ts) if np.isinf(max_time) else np.argmin(np.abs(ts - max_time))
+    
+    # Ensure proper ordering
+    if min_time_ind > max_time_ind:
+        min_time_ind, max_time_ind = max_time_ind, min_time_ind
+
+    x_window = np.zeros(len(ts))
+    if max_time_ind > min_time_ind:
+        active_len = max_time_ind - min_time_ind
+        x_window[min_time_ind:max_time_ind] = get_window(t_window, active_len)
 
     # Gets indices for the specified window times
     min_tau_ind = 0 if np.isinf(min_tau) else np.argmin(np.abs(taus - min_tau))
@@ -501,10 +519,26 @@ class THzExp:
         self.A.columns = ['time'] + list(np.round(taus, 2))
         self.B.columns = ['time'] + list(np.round(taus, 2))
 
+    def do_fft_all_ch(self, window=('tukey', 0.3), t_min=-np.inf, t_max=np.inf, Nt=None):
+        
+        if Nt is None:
+            power2 = 1
+        else:
+            power2 = int(np.log2(Nt))
+        
+        if window is None:
+            window = 'boxcar'
+
+        fft_A, _ = do_fft_all_taus(self.A, window=window, min_time=t_min, max_time=t_max, pad_power2=power2)
+        fft_B, _ = do_fft_all_taus(self.B, window=window, min_time=t_min, max_time=t_max, pad_power2=power2)
+        fft_AB, _ = do_fft_all_taus(self.AB, window=window, min_time=t_min, max_time=t_max, pad_power2=power2)
+        fft_NL, _ = do_fft_all_taus(self.NL, window=window, min_time=t_min, max_time=t_max, pad_power2=power2)
+
+        return fft_A, fft_B, fft_AB, fft_NL
 
 
 
-    def do_fft(self, data=None, window=('tukey', 0.3), t_min=-np.inf, t_max=np.inf, 
+    def do_2dfft(self, data=None, window=('tukey', 0.3), t_min=-np.inf, t_max=np.inf, 
                     subtract_baseline=False, t0_index=None, tau0_index=None, Nt=None, Ntau=None):
         """
         Compute and store 2D FFT results for a given dataframe (default: NL).

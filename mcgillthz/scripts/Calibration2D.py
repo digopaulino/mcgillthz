@@ -7,15 +7,15 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 # Inputs here
-folder = '/Users/rodrigo/Library/CloudStorage/OneDrive-McGillUniversity/1. Research/4. PbSnTe/2DTHz/Reflection/PbTe-Nov6'
-file_name = folder+'/Calibration_AB.csv'
+folder = '/Users/rodrigo/Library/CloudStorage/OneDrive-McGillUniversity/1. Research/8. Thiourea/Feb2026/Feb13'
+file_name = folder+'/CalibrationFeb13_AB.csv'
 
 calibration_file = folder+'/calibration.csv'
 
-order = 3      #Polynomial order to fit data. Change this to make the fit more reasonable
+order = 4      #Polynomial order to fit data. Change this to make the fit more reasonable
 peak_height = 1
-min_time = 0
-max_time = -2
+min_time = 1
+max_time = 18
 
 # Getting step size from metadata
 with open(file_name, 'r') as f:
