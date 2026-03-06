@@ -49,6 +49,8 @@ def get_asym_window(window, length, p_function=None):
     elif window == 'hann-log':
         p = lambda t: np.log(t + 1)/np.log(2)
         w = asymmetric_window(length, p)
+    elif window is None:
+        w = get_window('rectangular', length, fftbins=False)
     else:
         if p_function is not None:
             w = asymmetric_window(length, p_function)

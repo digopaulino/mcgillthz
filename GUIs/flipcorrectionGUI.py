@@ -31,8 +31,8 @@ if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 if 'dataset_list' not in st.session_state:
     st.session_state.dataset_list =[]
-if 'review_select' not in st.session_state:
-    st.session_state.review_select = None
+if 'current_base_path' not in st.session_state:
+    st.session_state.current_base_path = None
 
 # --- HELPER FUNCTIONS ---
 def select_multiple_files():
@@ -66,8 +66,6 @@ def extract_basenames(file_paths):
 def auto_correct_dataset(base_path, threshold, scan_orig=None):
     """
     Helper function to run the correction pipeline on a single dataset.
-    CRITICAL FIX: shift_times=True ensures the tau delay is relative to zero,
-    preventing massive index wrapping which scrambled the AB traces in Type 1.
     """
     if scan_orig is None:
         scan_orig = THzExp(base_path, shift_times=True) 
@@ -172,7 +170,7 @@ if st.sidebar.button("📁 Browse & Process Flips", type="primary", use_containe
         # Sort datasets so the ones WITH flips appear first in the list
         bases.sort(key=lambda b: len(st.session_state.datasets[b]['flips']) == 0)
         st.session_state.dataset_list = bases
-        st.session_state.review_select = None 
+        st.session_state.current_base_path = bases[0] if bases else None
         
         st.rerun()
 
@@ -191,26 +189,19 @@ if st.sidebar.button("💾 Save All Files", use_container_width=True):
                     os.makedirs(raw_dir, exist_ok=True)
                     
                     scan_c = data['scan_corrected']
-                    
-                    # Explicitly define channels to ensure AB is saved properly to disk
                     channels = {'A': scan_c.A, 'B': scan_c.B, 'AB': scan_c.AB}
                     
                     try:
                         for ch_name, df in channels.items():
                             orig_file = f"{base}_{ch_name}.csv"
                             if os.path.exists(orig_file):
-                                
-                                # 1. Copy original to raw files backup (Only if not backed up already)
                                 raw_file_path = os.path.join(raw_dir, os.path.basename(orig_file))
                                 if not os.path.exists(raw_file_path):
                                     shutil.copy(orig_file, raw_file_path)
                                 
-                                # 2. Extract original header
                                 with open(orig_file, 'r') as f:
                                     header = f.readline().strip()
                                 
-                                # 3. Save new data array 
-                                # Dropping 'time' and transposing strictly matches the original CSV array shape
                                 data_to_write = df.drop(columns='time').values.T
                                 np.savetxt(orig_file, data_to_write, delimiter=',', header=header, comments='')
                                 
@@ -232,30 +223,34 @@ if not st.session_state.dataset_list:
 else:
     st.subheader(f"Reviewing {len(st.session_state.dataset_list)} Datasets")
     
-    # 1. Build friendly display names
-    base_mapping = {}
-    for p in st.session_state.dataset_list:
+    # 1. Format function to dynamically render emoji/text WITHOUT changing the tracked value
+    def get_display_name(p):
+        if p not in st.session_state.datasets:
+            return p
         data = st.session_state.datasets[p]
         b_name = os.path.basename(p)
         if len(data['flips']) > 0:
-            display_name = f"🔄 {b_name} ({len(data['flips'])} flips)"
-        else:
-            display_name = f"✅ {b_name}"
-        base_mapping[display_name] = p
-        
-    display_names = list(base_mapping.keys())
+            return f"🔄 {b_name} ({len(data['flips'])} flips)"
+        return f"✅ {b_name}"
     
-    if st.session_state.review_select not in display_names:
-        st.session_state.review_select = display_names[0]
+    # Safe state fallback
+    if st.session_state.current_base_path not in st.session_state.dataset_list:
+        st.session_state.current_base_path = st.session_state.dataset_list[0] if st.session_state.dataset_list else None
         
-    # 2. Navigation Callbacks
+    # 2. Bulletproof Navigation Callbacks
+    def get_safe_index():
+        try:
+            return st.session_state.dataset_list.index(st.session_state.current_base_path)
+        except ValueError:
+            return 0
+
     def go_prev():
-        idx = display_names.index(st.session_state.review_select)
-        st.session_state.review_select = display_names[(idx - 1) % len(display_names)]
+        idx = get_safe_index()
+        st.session_state.current_base_path = st.session_state.dataset_list[(idx - 1) % len(st.session_state.dataset_list)]
 
     def go_next():
-        idx = display_names.index(st.session_state.review_select)
-        st.session_state.review_select = display_names[(idx + 1) % len(display_names)]
+        idx = get_safe_index()
+        st.session_state.current_base_path = st.session_state.dataset_list[(idx + 1) % len(st.session_state.dataset_list)]
     
     # 3. Render Navigation Bar
     st.markdown("**Dataset Navigation:**")
@@ -263,63 +258,65 @@ else:
     with col_prev:
         st.button("⬅️ Previous", on_click=go_prev, use_container_width=True)
     with col_sel:
-        st.selectbox("Select Dataset", options=display_names, key='review_select', label_visibility="collapsed")
+        # Binding the selectbox directly to current_base_path handles state perfectly internally
+        st.selectbox(
+            "Select Dataset", 
+            options=st.session_state.dataset_list, 
+            format_func=get_display_name,
+            key='current_base_path',
+            label_visibility="collapsed"
+        )
     with col_next:
         st.button("Next ➡️", on_click=go_next, use_container_width=True)
         
     # 4. Extract Current Dataset
-    selected_base_name = st.session_state.review_select
-    selected_base_path = base_mapping[selected_base_name]
-    data = st.session_state.datasets[selected_base_path]
-    
-    # Highlight Status Bar
-    if "No flips detected" in data['status']:
-        st.success(data['status'])
-    elif "Type 2" in data['status']:
-        st.info(data['status'])
-    else:
-        st.warning(data['status'])
+    selected_base_path = st.session_state.current_base_path
+    if selected_base_path and selected_base_path in st.session_state.datasets:
+        data = st.session_state.datasets[selected_base_path]
         
-    # Detail exact flip locations
-    if data['flips']:
-        taus = data['scan_original'].A.columns[1:].astype(float)
-        flip_desc = ", ".join([f"τ={taus[f['tau_idx']]}ps ({f['type']})" for f in data['flips']])
-        st.write(f"**Detected Phase Flips:** {flip_desc}")
-    
-    # --- INDIVIDUAL RE-EVALUATION CONTROLS ---
-    with st.expander("⚙️ Re-evaluate Dataset with New Threshold", expanded=False):
-        col1, col2 = st.columns([2, 1])
-        new_thresh = col1.number_input("New Detection Threshold (Sigma)", value=4.0, step=0.5, key="new_thresh_input")
-        st.markdown("<br>", unsafe_allow_html=True)
+        # Highlight Status Bar
+        if "No flips detected" in data['status']:
+            st.success(data['status'])
+        elif "Type 2" in data['status']:
+            st.info(data['status'])
+        else:
+            st.warning(data['status'])
+            
+        # Detail exact flip locations
+        if data['flips']:
+            taus = data['scan_original'].A.columns[1:].astype(float)
+            flip_desc = ", ".join([f"τ={taus[f['tau_idx']]}ps ({f['type']})" for f in data['flips']])
+            st.write(f"**Detected Phase Flips:** {flip_desc}")
         
-        if col2.button("Re-detect & Correct", use_container_width=True):
-            with st.spinner("Re-evaluating dataset..."):
-                try:
-                    updated_data = auto_correct_dataset(selected_base_path, new_thresh, scan_orig=data['scan_original'])
-                    st.session_state.datasets[selected_base_path] = updated_data
-                    
-                    b_name = os.path.basename(selected_base_path)
-                    if len(updated_data['flips']) > 0:
-                        new_display_name = f"🔄 {b_name} ({len(updated_data['flips'])} flips)"
-                    else:
-                        new_display_name = f"✅ {b_name}"
+        # --- INDIVIDUAL RE-EVALUATION CONTROLS ---
+        with st.expander("⚙️ Re-evaluate Dataset with New Threshold", expanded=False):
+            col1, col2 = st.columns([2, 1])
+            new_thresh = col1.number_input("New Detection Threshold (Sigma)", value=4.0, step=0.5, key="new_thresh_input")
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if col2.button("Re-detect & Correct", use_container_width=True):
+                with st.spinner("Re-evaluating dataset..."):
+                    try:
+                        updated_data = auto_correct_dataset(selected_base_path, new_thresh, scan_orig=data['scan_original'])
+                        st.session_state.datasets[selected_base_path] = updated_data
                         
-                    st.session_state.review_select = new_display_name
-                except Exception as e:
-                    st.error(f"Error updating dataset: {e}")
-            st.rerun()
-    
-    st.divider()
-    
-    # 5. Compare Grids Side-by-Side
-    col_bef, col_aft = st.columns(2)
-    
-    with col_bef:
-        st.markdown(f"**Original Data**")
-        fig_bef = plotly_2x2_grid(data['scan_original'], "Raw Data")
-        st.plotly_chart(fig_bef, use_container_width=True)
+                        # STRICT ENFORCEMENT: Force UI to stay locked on this path after rerun
+                        st.session_state.current_base_path = selected_base_path
+                    except Exception as e:
+                        st.error(f"Error updating dataset: {e}")
+                st.rerun()
         
-    with col_aft:
-        st.markdown(f"**Final Data**")
-        fig_aft = plotly_2x2_grid(data['scan_corrected'], "Corrected Data (to be saved)")
-        st.plotly_chart(fig_aft, use_container_width=True)
+        st.divider()
+        
+        # 5. Compare Grids Side-by-Side
+        col_bef, col_aft = st.columns(2)
+        
+        with col_bef:
+            st.markdown(f"**Original Data**")
+            fig_bef = plotly_2x2_grid(data['scan_original'], "Raw Data")
+            st.plotly_chart(fig_bef, use_container_width=True)
+            
+        with col_aft:
+            st.markdown(f"**Final Data**")
+            fig_aft = plotly_2x2_grid(data['scan_corrected'], "Corrected Data (to be saved)")
+            st.plotly_chart(fig_aft, use_container_width=True)

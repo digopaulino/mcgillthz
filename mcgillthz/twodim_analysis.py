@@ -233,7 +233,9 @@ def cosine_taper_window(M, flat_start, flat_end, rise_start=0, fall_end=None):
 
 
 
-def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min_tau=-np.inf, max_tau=np.inf, min_time=-np.inf, max_time=np.inf):
+def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min_tau=-np.inf, 
+              max_tau=np.inf, min_time=-np.inf, max_time=np.inf,
+              subtract_baseline=False, t_base_min=-np.inf, t_base_max=-np.inf):
     """
     Applies a 2D window to spectroscopy data using a standard window for the probe axis
     and a variable-support cosine taper for the delay axis.
@@ -272,7 +274,13 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
     max_time : float, optional
         The maximum probe time to be included in the window.
         Default is the maximum time in the dataset.
-
+    subtract_baseline : bool
+        If True, a baseline is subtracted from each delay time.
+        This is calculated as the average value for t_base_min < t < t_base_max.
+    t_base_min : float, optional
+        The minimum probe time that will be considered when calculating the baseline.
+    t_base_max : float, optional
+        The maximum probe time that will be considered when calculating the baseline.
 
     Returns
     -------
@@ -288,6 +296,13 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
     ts = df['time'].values
     taus = df.columns[1:].astype(float)
     data = df.drop(columns='time').values
+
+    # --- Baseline Subtraction (Applied BEFORE windowing) ---
+    if subtract_baseline:
+        baseline_mask = (ts >= t_base_min) & (ts <= t_base_max)
+        if np.any(baseline_mask):
+            baseline_vals = np.mean(data[baseline_mask, :], axis=0)
+            data = data - baseline_vals[np.newaxis, :]
 
     # 1. Probe Time (t) Window
     min_time_ind = 0 if np.isinf(min_time) else np.argmin(np.abs(ts - min_time))
@@ -313,6 +328,7 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
     window_2d = x_window[:, np.newaxis] * y_window[np.newaxis, :] 
     windowed_data = data * window_2d
 
+
     df_out = pd.DataFrame(windowed_data, columns=df.columns[1:])
     df_out.insert(0, 'time', ts)
     return df_out
@@ -322,7 +338,7 @@ def window_2d(df, t_window=('tukey', 0.3), flat_tau_start=0, flat_tau_end=1, min
 
 
 def compute_2d_fft(df, window=('tukey', 0.1), t_min=-np.inf, t_max=np.inf, 
-                   subtract_baseline=False, t0_index=None, tau0_index=None, Nt=None, Ntau=None):
+                   t0_index=None, tau0_index=None, Nt=None, Ntau=None):
     """
     Computes the 2D FFT of time-resolved spectroscopy data with optional zero-padding 
     and phase correction.
@@ -339,8 +355,6 @@ def compute_2d_fft(df, window=('tukey', 0.1), t_min=-np.inf, t_max=np.inf,
         Minimum probe time (t) to include in the analysis.
     - t_max : float, optional
         Maximum probe time (t) to include in the analysis.
-    - subtract_baseline : bool, optional
-        If True, subtracts the mean of the data before processing.
     - t0_index : int, optional
         Index of t=0 in the *cropped* time axis. If provided, the data is zero-padded 
         such that this index becomes the geometric center of the array (index N/2). 
@@ -372,9 +386,6 @@ def compute_2d_fft(df, window=('tukey', 0.1), t_min=-np.inf, t_max=np.inf,
     tau = df.columns[1:].astype(float)
 
     data = df.drop(columns='time').iloc[mask, :].values.T 
-
-    if subtract_baseline:
-        data = data - data.mean()
 
     # --- Windowing ---
     if window is not None:
@@ -539,7 +550,7 @@ class THzExp:
 
 
     def do_2dfft(self, data=None, window=('tukey', 0.3), t_min=-np.inf, t_max=np.inf, 
-                    subtract_baseline=False, t0_index=None, tau0_index=None, Nt=None, Ntau=None):
+                 t0_index=None, tau0_index=None, Nt=None, Ntau=None):
         """
         Compute and store 2D FFT results for a given dataframe (default: NL).
 
@@ -551,8 +562,6 @@ class THzExp:
             Window type and parameters for scipy.signal.get_window
         t_min, t_max : float
             Probe time range to include
-        subtract_baseline : bool, optional
-            If True, subtracts the mean of the data before processing.
         t0_index : int, optional
             Index of t=0 in the *cropped* time axis. If provided, the data is zero-padded 
             such that this index becomes the geometric center of the array (index N/2). 
@@ -580,7 +589,7 @@ class THzExp:
             tau0_index = self.tau0_index
 
         self.ft_data, self.freq_t, self.freq_tau = compute_2d_fft(df, window=window, t_min=t_min, t_max=t_max,
-                                                                    subtract_baseline=subtract_baseline, t0_index=t0_index, tau0_index=tau0_index,
+                                                                    t0_index=t0_index, tau0_index=tau0_index,
                                                                     Nt=Nt, Ntau=Ntau)
 
         print("2D FFT computed and stored in class properties.")
