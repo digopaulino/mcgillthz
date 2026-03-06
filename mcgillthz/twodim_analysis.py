@@ -788,3 +788,199 @@ class THzExp:
             plt.show()
 
             return tau_slider, ax
+
+    def detect_flips(self, threshold_sigma=4.0):
+            """
+            Detects unusual noise or 'flips' in the A and B channels of the dataset.
+            
+            Channel B is steady in time, so traces are compared directly.
+            Channel A moves in time with tau, so it is shifted to a stationary 
+            reference frame before comparison.
+            
+            Parameters
+            ----------
+            threshold_sigma : float, optional
+                The number of standard deviations above the median error to classify 
+                a tau step as a 'flip'. Default is 4.0.
+                
+            Returns
+            -------
+            flip_indices : list of int
+                The integer indices (corresponding to the tau axis) where flips occur.
+            flip_types : list of str
+                The type of flip detected at the corresponding index: 'A', 'B', or 'both'.
+            """
+            import numpy as np
+            
+            ts = self.A['time'].values
+            taus = self.A.columns[1:].astype(float)
+            t_step = ts[1] - ts[0]
+            
+            # ---------------------------------------------------------
+            # 1. Check Channel B (Steady in time)
+            # ---------------------------------------------------------
+            data_B = self.B.drop(columns='time').values
+            ref_B = np.median(data_B, axis=1)
+            mse_B = np.mean((data_B - ref_B[:, np.newaxis])**2, axis=0)
+            
+            med_mse_B = np.median(mse_B)
+            std_mse_B = np.std(mse_B)
+            mask_B = mse_B > (med_mse_B + threshold_sigma * std_mse_B)
+            
+            # ---------------------------------------------------------
+            # 2. Check Channel A (Moves in time)
+            # ---------------------------------------------------------
+            data_A = self.A.drop(columns='time').values
+            shifted_A = np.zeros_like(data_A)
+            
+            for j, tau in enumerate(taus):
+                shift_indices = int(round(tau / t_step))
+                column_data = data_A[:, j]
+                
+                if shift_indices > 0:
+                    shifted_A[:, j] = np.roll(column_data, shift_indices)
+                    shifted_A[:shift_indices, j] = 0 
+                elif shift_indices < 0:
+                    shifted_A[:, j] = np.roll(column_data, shift_indices)
+                    shifted_A[shift_indices:, j] = 0 
+                else:
+                    shifted_A[:, j] = column_data
+                    
+            ref_A = np.median(shifted_A, axis=1)
+            mse_A = np.mean((shifted_A - ref_A[:, np.newaxis])**2, axis=0)
+            
+            med_mse_A = np.median(mse_A)
+            std_mse_A = np.std(mse_A)
+            mask_A = mse_A > (med_mse_A + threshold_sigma * std_mse_A)
+            
+            # ---------------------------------------------------------
+            # 3. Combine, classify, and print
+            # ---------------------------------------------------------
+            flip_indices = []
+            flip_types = []
+            
+            for i, tau in enumerate(taus):
+                if mask_A[i] and mask_B[i]:
+                    flip_indices.append(i)
+                    flip_types.append('both')
+                    print(f"Noise found in both channels at tau = {tau} ps")
+                elif mask_A[i]:
+                    flip_indices.append(i)
+                    flip_types.append('A')
+                    print(f"Noise found in channel A at tau = {tau} ps")
+                elif mask_B[i]:
+                    flip_indices.append(i)
+                    flip_types.append('B')
+                    print(f"Noise found in channel B at tau = {tau} ps")
+                    
+            return flip_indices, flip_types
+
+    def correct_flip(self, tau_index, flip_type, how):
+            """
+            Corrects phase flips in the A, B, AB, and NL channels.
+            
+            Parameters
+            ----------
+            tau_index : int
+                The index of the tau delay where the flip occurs.
+            flip_type : str
+                The type of flip detected: 'A', 'B', or 'both'.
+            how : int
+                Correction method:
+                0 - Ignore and do nothing.
+                1 - Average noise. Replaces the A, B, AB, and NL traces with the average 
+                    of adjacent tau steps (shifts moving channels to stationary frame first).
+                2 - Correct flip. Applies analytical correction for channel assignment errors.
+            """
+            if how == 0:
+                return
+                
+            col = tau_index + 1  # Offset by 1 because column 0 is 'time'
+            ts = self.A['time'].values
+            taus = self.A.columns[1:].astype(float)
+            t_step = ts[1] - ts[0]
+            tau_current = taus[tau_index]
+            
+            # ---------------------------------------------------------
+            # Method 1: Average the noise
+            # ---------------------------------------------------------
+            if how == 1:
+                # Determine adjacent indices (with boundary protection)
+                prev_idx = max(0, tau_index - 1)
+                next_idx = min(len(taus) - 1, tau_index + 1)
+                
+                # Helper: Shift a lab-frame trace to the stationary frame
+                def get_stationary(trace, tau):
+                    shift_idx = int(round(tau / t_step))
+                    shifted = np.roll(trace, shift_idx)
+                    if shift_idx > 0:
+                        shifted[:shift_idx] = 0
+                    elif shift_idx < 0:
+                        shifted[shift_idx:] = 0
+                    return shifted
+
+                # Helper: Shift a stationary trace back to the lab frame
+                def get_lab_frame(trace, tau):
+                    shift_idx = int(round(-tau / t_step))
+                    shifted = np.roll(trace, shift_idx)
+                    if shift_idx > 0:
+                        shifted[:shift_idx] = 0
+                    elif shift_idx < 0:
+                        shifted[shift_idx:] = 0
+                    return shifted
+
+                # B and NL are steady in time, average without shifting
+                for df in [self.B, self.NL]:
+                    val_prev = df.iloc[:, prev_idx + 1].values
+                    val_next = df.iloc[:, next_idx + 1].values
+                    df.iloc[:, col] = (val_prev + val_next) / 2.0
+                
+                # A move with tau, average in the stationary frame
+                val_prev = self.A.iloc[:, prev_idx + 1].values
+                val_next = self.A.iloc[:, next_idx + 1].values
+                
+                # 1. Shift adjacent traces to the stationary frame
+                stat_prev = get_stationary(val_prev, taus[prev_idx])
+                stat_next = get_stationary(val_next, taus[next_idx])
+                
+                # 2. Average them in the stationary frame
+                stat_avg = (stat_prev + stat_next) / 2.0
+                
+                # 3. Shift the averaged trace back to the lab frame for the current tau
+                self.A.iloc[:, col] = get_lab_frame(stat_avg, tau_current)
+                
+                # AB calculated from A, B and NL
+                
+                self.AB.iloc[:, col] = self.A.iloc[:, col] + self.B.iloc[:, col] + self.NL.iloc[:, col]
+
+            # ---------------------------------------------------------
+            # Method 2: Analytical channel correction
+            # ---------------------------------------------------------
+            elif how == 2:
+                # Keep original values for the analytical correction
+                old_A = self.A.iloc[:, col].values.copy()
+                old_B = self.B.iloc[:, col].values.copy()
+                old_AB = self.AB.iloc[:, col].values.copy()
+                
+                if flip_type == 'B':
+                    new_AB = old_A - old_AB
+                    new_A = old_B - old_AB
+                    new_B = -old_AB
+                elif flip_type == 'A':
+                    new_AB = old_B - old_A
+                    new_A = -old_A
+                    new_B = old_AB - old_A
+                elif flip_type == 'both':
+                    new_AB = -old_B
+                    new_A = old_AB - old_B
+                    new_B = old_A - old_B
+                else:
+                    return
+
+                # Apply new arrays
+                self.AB.iloc[:, col] = new_AB
+                self.A.iloc[:, col] = new_A
+                self.B.iloc[:, col] = new_B
+                
+                # Standard NL recalculation: new_AB - new_A - new_B 
+                self.NL.iloc[:, col] = new_AB - new_A - new_B
