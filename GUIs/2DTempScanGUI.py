@@ -163,10 +163,12 @@ def get_tf_plot_data(scan, value_to_plot, log_scale):
     elif value_to_plot == 'Real': z_tf = np.real(z_comp)
     elif value_to_plot == 'Imaginary': z_tf = np.imag(z_comp)
     elif value_to_plot == 'Phase': z_tf = np.angle(z_comp)
-    
+
     if log_scale and value_to_plot != 'Phase':
         z_tf = np.log10(np.where(np.abs(z_tf) > 0, np.abs(z_tf), np.nan))
     return z_tf
+
+
 
 def get_cross_section(scan, line_def, x_axis_type, y_axis_type):
     interp_r = RegularGridInterpolator((scan.freq_tau, scan.freq_t), np.real(scan.ft_data), bounds_error=False, fill_value=np.nan)
@@ -325,9 +327,11 @@ with tab2:
         st.divider()
         scan = st.session_state.temp_scans[selected_temp]
         
-        c_xfreq, c_yfreq = st.columns(2)
+        c_xfreq, c_yfreq, c_xtime, c_ytime = st.columns(4)
         max_p_freq = c_xfreq.number_input("Max Probe Freq (THz)", value=3.0, step=0.5, key="tab2_px")
         max_e_freq = c_yfreq.number_input("Max Excitation Freq (THz)", value=float(scan.freq_tau.max()), step=0.5, key="tab2_ex")
+        min_tt_time = c_xtime.number_input("Min Probe Freq (ps)", value=float(st.session_state.config_loaded['win_min_time']), step=0.5, key="tab2_mint")
+        max_tt_time = c_ytime.number_input("Max Probe time (ps)", value=float(st.session_state.config_loaded['win_max_time']), step=0.5, key="tab2_maxt")
 
         z_2d = get_2d_plot_data(scan, val_to_plot, log_scale, 0)
         max_2d = float(np.nanmax(np.abs(z_2d))) if not np.isnan(np.nanmax(z_2d)) else 1.0
@@ -337,6 +341,9 @@ with tab2:
         max_tf = float(np.nanmax(np.abs(z_tf))) if not np.isnan(np.nanmax(z_tf)) else 1.0
         min_tf_def = -max_tf if (val_to_plot in['Real', 'Imaginary', 'Phase'] and not log_scale) else float(np.nanmin(z_tf))
 
+        z_tt = scan.windowed.drop(columns='time').values.T
+        max_tt = float(np.nanmax(np.abs(z_tt))) if not np.isnan(np.nanmax(z_tt)) else 1.0
+
         # --- Plot 2D FFT ---
         c_p1, c_s1 = st.columns([8.5, 1.5])
         with c_s1:
@@ -345,17 +352,27 @@ with tab2:
             v2_min = st.number_input("vmin", value=min_2d_def, step=0.1, key="t2_v2min")
         with c_p1:
             fig2d = go.Figure(data=go.Heatmap(z=z_2d, x=scan.freq_t, y=scan.freq_tau, colorscale=get_plotly_cmap(cmap_2d), zmin=v2_min, zmax=v2_max))
+            
+            # ADD DASHED WHITE LINE AT Y=0
+            fig2d.add_hline(y=0, line_dash="dash", line_color="white", line_width=1.5)
+            
             fig2d.update_layout(title=f"2D Frequency-Frequency Map ({selected_temp} K)", xaxis_title="Probe frequency ν_t (THz)", yaxis_title="Excitation frequency ν_τ (THz)", height=500, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
             fig2d.update_xaxes(range=[0, max_p_freq]); fig2d.update_yaxes(range=[-max_e_freq, max_e_freq])
             st.plotly_chart(fig2d, width="stretch")
             
-        # --- Plot Time-Freq Map ---
-        c_p2, c_s2 = st.columns([8.5, 1.5])
+        # --- Plot Time-Time Map and Time-Freq Map ---
+        c_p2, c_p3, c_s2 = st.columns([4.5, 4.5, 1])
         with c_s2:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            vt_max = st.number_input("vmax", value=max_tf, step=0.1, key="t2_vtmax")
-            vt_min = st.number_input("vmin", value=min_tf_def, step=0.1, key="t2_vtmin")
+            vt_max = st.number_input("vmax", value=max_tf, step=0.1, key="t3_vtmax")
+            vt_min = st.number_input("vmin", value=min_tf_def, step=0.1, key="t3_vtmin")
+            vtt_max = st.number_input("vmax (time-time plot)", value=max_tt, step=0.1, key="t2_vtmax")
         with c_p2:
+            figtt = go.Figure(data=go.Heatmap(z=z_tt, x=scan.windowed['time'].values, y=scan.windowed.columns[1:].astype(float), colorscale=get_plotly_cmap('bwr'), zmin=-vtt_max, zmax=vtt_max))
+            figtt.update_layout(title=f"Time-Time Map ({selected_temp} K)", xaxis_title="Probe time t (ps)", yaxis_title="Excitation delay τ (ps)", height=500, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
+            figtt.update_xaxes(range=[min_tt_time, max_tt_time])
+            st.plotly_chart(figtt, width="stretch")
+        with c_p3:
             figtf = go.Figure(data=go.Heatmap(z=z_tf, x=scan.ft_1d_df['freq'].values, y=scan.ft_1d_df.columns[1:].astype(float), colorscale=get_plotly_cmap(cmap_2d), zmin=vt_min, zmax=vt_max))
             figtf.update_layout(title=f"Time-Frequency Map (Probe FFT) ({selected_temp} K)", xaxis_title="Probe frequency ν_t (THz)", yaxis_title="Excitation delay τ (ps)", height=500, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
             figtf.update_xaxes(range=[0, max_p_freq])
@@ -370,7 +387,7 @@ with tab2:
         sel_tau = c_tau.select_slider("Excitation Delay τ (ps)", options=taus, value=taus[0], key='tab2_tau')
         fixed_fft_max = c_fmax.number_input("Max 1D FFT Amplitude", value=st.session_state.global_fft_max, step=0.1, help="Fixed max limit for all temperatures/delays")
 
-        col_match =[c for c in scan.A.columns[1:] if abs(float(c) - sel_tau) < 1e-5][0]
+        col_match = [c for c in scan.A.columns[1:] if abs(float(c) - sel_tau) < 1e-5][0]
         
         tr_tb, tr_fb = get_spectrum_traces(np.array([scan.B['time'], scan.B[col_match]]), np.array([scan.fft_B['freq'], scan.fft_B[col_match]]), 'blue', 'B')
         tr_ta, tr_fa = get_spectrum_traces(np.array([scan.A['time'], scan.A[col_match]]), np.array([scan.fft_A['freq'], scan.fft_A[col_match]]), 'red', 'A')
@@ -405,9 +422,9 @@ with tab3:
         st.subheader("Global Plotting Parameters")
         c_p1, c_p2 = st.columns(2)
         overlay_cmap = c_p1.selectbox("Overlay Colormap (Maps T_min to T_max)", 
-                                      options=['magma', 'thermal', 'cividis', 'hot', 'solar', 'sunset_r', 'agsunset'], index=0)
+                                      options=['magma', 'thermal', 'cividis', 'hot', 'solar', 'sunset', 'agsunset'], index=0)
         temp_colors = get_continuous_colors(st.session_state.sorted_temps, overlay_cmap)
-        tab3_max_freq = c_p2.number_input("Maximum Frequency Axis (THz)", value=6.0, step=0.5, key="tab3_max_freq")
+        tab3_max_freq = c_p2.number_input("Maximum Frequency Axis (THz)", value=4.0, step=0.5, key="tab3_max_freq")
         
         st.divider()
         st.subheader("1D Spectra Overlay")
@@ -427,17 +444,17 @@ with tab3:
             fig_ov_1d.add_trace(go.Scatter(
                 x=fft_df['freq'], y=fft_df[col_m], name=f"{T} K", 
                 mode='lines',
-                line=dict(color=temp_colors[i], width=2)
+                line=dict(color=temp_colors[i], width=2),
+                # Custom tooltip placing the X value on a new line!
+                hovertemplate=f"<b>{T} K</b> | Val: %{{y:.4f}}<br>Freq: %{{x:.3f}} THz<extra></extra>" 
             ))
             
         fig_ov_1d.update_xaxes(
             title_text="Frequency (THz)", range=[0, tab3_max_freq],
-            showspikes=True, spikemode="across", spikethickness=1, spikecolor="black"
+            showspikes=True, spikemode="toaxis", spikecolor="black", spikethickness=1
         )
         fig_ov_1d.update_yaxes(title_text="FFT Amplitude (a.u.)", type="log" if ov_log else "linear")
-        fig_ov_1d.update_layout(
-            height=450, hovermode="x unified", template="plotly_white", margin=dict(l=0, r=0, t=30, b=0)
-        )
+        fig_ov_1d.update_layout(height=450, hovermode="closest", template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
         st.plotly_chart(fig_ov_1d, width="stretch")
         
         st.divider()
@@ -469,9 +486,8 @@ with tab3:
             line_def = {'m': m, 'b': b, 'is_vertical': is_vert, 'x_val': x_val}
 
             st.markdown("<br>**Extract Trend**", unsafe_allow_html=True)
-            st.caption("Click directly on any line in the plot to extract the exact frequency value automatically.")
+            st.caption("Click directly on any point in the plot to extract its trend!")
             
-            # The manual input box is tied to the exact same session state key updated by the clicker!
             st.session_state.trend_freq_manual = st.number_input(
                 "Target Frequency (THz)", 
                 value=st.session_state.trend_freq_manual, 
@@ -494,8 +510,9 @@ with tab3:
                     fig_ov_cs.add_trace(go.Scatter(
                         x=x_arr, y=y_arr, name=f"{T} K", 
                         mode='lines+markers', # Required so clicks register perfectly
-                        marker=dict(size=4, opacity=0.01), # Invisible markers
-                        line=dict(color=temp_colors[i], width=2)
+                        marker=dict(size=3, color=temp_colors[i], opacity=0.01), # Highly transparent markers for selection
+                        line=dict(color=temp_colors[i], width=2),
+                        hovertemplate=f"<b>{T} K</b> | Val: %{{y:.4f}}<br>Freq: %{{x:.3f}} THz<extra></extra>"
                     ))
                     
                     idx = np.argmin(np.abs(x_arr - st.session_state.trend_freq_manual))
@@ -512,26 +529,28 @@ with tab3:
                 else:
                     fig_ov_cs.update_xaxes(range=[-tab3_max_freq, tab3_max_freq])
 
-                fig_ov_cs.update_xaxes(showspikes=True, spikemode="across", spikethickness=1, spikecolor="black")
+                fig_ov_cs.update_xaxes(showspikes=True, spikemode="toaxis", spikecolor="black", spikethickness=1)
+                
+                # hovermode='closest' correctly isolates single traces
                 fig_ov_cs.update_layout(
                     xaxis_title=x_lbl, yaxis_title=f"{cs_y_axis} (a.u.)", 
                     height=450, template="plotly_white", 
-                    hovermode="x unified", margin=dict(l=0, r=0, t=10, b=0)
+                    hovermode="closest", clickmode="event+select", margin=dict(l=0, r=0, t=10, b=0)
                 )
                 
-                # Render with native clicking support!
+                # Render with clicking support enabled
                 selection_event = st.plotly_chart(
                     fig_ov_cs, 
                     width="stretch", 
                     on_select="rerun", 
-                    selection_mode=["points", "box", "lasso"],
-                    config={'displayModeBar': True}
+                    selection_mode=["points"]
                 )
                 
-                # Check for clicks and immediately synchronize the state
+                # Check for clicks and instantly synchronize the number_input target
                 if selection_event and selection_event.get("selection", {}).get("points"):
                     clicked_x = float(selection_event["selection"]["points"][0]["x"])
                     if abs(clicked_x - st.session_state.trend_freq_manual) > 1e-6:
+                        # Direct state update from click forces the number_input above to perfectly sync!
                         st.session_state.trend_freq_manual = clicked_x
                         st.rerun()
 

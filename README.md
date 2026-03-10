@@ -12,9 +12,9 @@ The following packages must also be installed:
 - numpy, pandas, matplotlib, scipy.
 - tqdm (optional) - Adds a progress bar to the code
 - PyWavelets (optional) - Does continous wavelet transforms.
-- ipympl (optional) - Allows for iterative plots on a jupyter notebook.
+- ipympl, pywt (optional) - Allows for iterative plots on a jupyter notebook.
 <!-- - lmfit - Wraps scipy.optimize to allow for easier manipulation of the parameters. Very useful for fitting optical functions with many parameters. -->
-- Streamlit, Plotly (optional) - Necessary for all GUIs.
+- Streamlit, Plotly, pywt (optional) - Necessary for all GUIs.
 
 
 # File Tree
