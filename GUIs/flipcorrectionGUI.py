@@ -145,7 +145,7 @@ def plotly_2x2_grid(scan, title):
 st.sidebar.header("1. Load & Auto-Correct")
 threshold = st.sidebar.number_input("Detection Threshold (Sigma)", value=4.0, step=0.5)
 
-if st.sidebar.button("📁 Browse & Process Flips", type="primary", use_container_width=True):
+if st.sidebar.button("📁 Browse & Process Flips", type="primary", width="stretch"):
     chosen_paths = select_multiple_files()
     if chosen_paths:
         bases = extract_basenames(chosen_paths)
@@ -177,7 +177,7 @@ if st.sidebar.button("📁 Browse & Process Flips", type="primary", use_containe
 
 st.sidebar.divider()
 st.sidebar.header("2. Export All")
-if st.sidebar.button("💾 Save All Files", use_container_width=True):
+if st.sidebar.button("💾 Save All Files", width="stretch"):
     if not st.session_state.datasets:
         st.sidebar.warning("No datasets loaded.")
     else:
@@ -256,7 +256,7 @@ else:
     st.markdown("**Dataset Navigation:**")
     col_prev, col_sel, col_next = st.columns([1, 4, 1])
     with col_prev:
-        st.button("⬅️ Previous", on_click=go_prev, use_container_width=True)
+        st.button("⬅️ Previous", on_click=go_prev, width="stretch")
     with col_sel:
         # Binding the selectbox directly to current_base_path handles state perfectly internally
         st.selectbox(
@@ -267,7 +267,7 @@ else:
             label_visibility="collapsed"
         )
     with col_next:
-        st.button("Next ➡️", on_click=go_next, use_container_width=True)
+        st.button("Next ➡️", on_click=go_next, width="stretch")
         
     # 4. Extract Current Dataset
     selected_base_path = st.session_state.current_base_path
@@ -294,7 +294,7 @@ else:
             new_thresh = col1.number_input("New Detection Threshold (Sigma)", value=4.0, step=0.5, key="new_thresh_input")
             st.markdown("<br>", unsafe_allow_html=True)
             
-            if col2.button("Re-detect & Correct", use_container_width=True):
+            if col2.button("Re-detect & Correct", width="stretch"):
                 with st.spinner("Re-evaluating dataset..."):
                     try:
                         updated_data = auto_correct_dataset(selected_base_path, new_thresh, scan_orig=data['scan_original'])
@@ -314,9 +314,9 @@ else:
         with col_bef:
             st.markdown(f"**Original Data**")
             fig_bef = plotly_2x2_grid(data['scan_original'], "Raw Data")
-            st.plotly_chart(fig_bef, use_container_width=True)
+            st.plotly_chart(fig_bef, width="stretch")
             
         with col_aft:
             st.markdown(f"**Final Data**")
             fig_aft = plotly_2x2_grid(data['scan_corrected'], "Corrected Data (to be saved)")
-            st.plotly_chart(fig_aft, use_container_width=True)
+            st.plotly_chart(fig_aft, width="stretch")
