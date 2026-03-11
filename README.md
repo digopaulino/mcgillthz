@@ -1,20 +1,20 @@
 # McGill THz Spectroscopy package
 
-This package was made to facilitate the analysis of different types of THz spectroscopy experiments, be it a simple scan, time-domain spectroscopy (TDS) or 2D optical pump-THz probe spectroscopy (TRTS).
+This package was made to facilitate the analysis of different types of THz spectroscopy experiments performed in McGill's Ultrafast THz Spectroscopy Lab, be it simple time-domain spectroscopy (TDS) experiments, or complex 2D data from optical pump-THz probe spectroscopy (TRTS) or 2D Coherent THz Spectroscopy (2D THz).
 
-A full documentation is not yet available, but all functions are thoroughly described in the files they are defined. Combined with the tutorials available in the *tutorials/* folder, it should be more than enough to get you going in your analysis.
+A full documentation is not yet available, but all functions are thoroughly described in the files they are defined. Combined with the tutorials available in the *tutorials/* folder for TDS and TRTS, and the GUIs in the *GUIs/* folder for 2D THz, it should be more than enough to get you going in your analysis.
 
 # Installation 
 
-To use this package, simply download all the files and extract them into a folder (like "mcgillthz/"). You'll need an installation of Python 3 (v3.9 or higher), but I recommend using the functions on a jupyter notebook.
+To use this package, simply download all the files and extract them into a folder (like "mcgillthz/"). You'll need an installation of Python 3 (v3.9 or higher), but I recommend an anaconda instalation. 
 
 The following packages must also be installed:
-- numpy, pandas, matplotlib, scipy.
+- numpy, pandas, matplotlib, scipy - General
 - tqdm (optional) - Adds a progress bar to the code
 - PyWavelets (optional) - Does continous wavelet transforms.
 - ipympl, pywt (optional) - Allows for iterative plots on a jupyter notebook.
 <!-- - lmfit - Wraps scipy.optimize to allow for easier manipulation of the parameters. Very useful for fitting optical functions with many parameters. -->
-- Streamlit, Plotly, pywt (optional) - Necessary for all GUIs.
+- Streamlit, Plotly (optional) - Necessary for all GUIs.
 
 
 # File Tree

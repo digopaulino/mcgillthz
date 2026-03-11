@@ -234,11 +234,8 @@ def plotly_transmission(freq, T_A, T_B, uirevision, max_freq, delta_t_A, delta_t
     offsetA = 2 * np.pi * delta_t_A * T_A[0]
     offsetB = 2 * np.pi * delta_t_B * T_B[0]
 
-    fig.add_trace(go.Scatter(x=freq, y=(T_B[2] - offsetB), name='B Phase', line=dict(color='blue', dash='solid')), row=1, col=2)
-    fig.add_trace(go.Scatter(x=freq, y=(T_A[2] - offsetA), name='A Phase', line=dict(color='red', dash='solid')), row=1, col=2)
-
-    fig.add_trace(go.Scatter(x=freq, y=T_B[2], name='B Phase', line=dict(color='blue', dash='dash')), row=1, col=2)
-    fig.add_trace(go.Scatter(x=freq, y=T_A[2], name='A Phase', line=dict(color='red', dash='dash')), row=1, col=2)
+    fig.add_trace(go.Scatter(x=freq, y=(T_B[2] - offsetB), line=dict(color='blue', dash='solid')), row=1, col=2)
+    fig.add_trace(go.Scatter(x=freq, y=(T_A[2] - offsetA), line=dict(color='red', dash='solid')), row=1, col=2)
 
 
     fig.update_xaxes(title_text="Frequency (THz)", row=1, col=2)
@@ -588,13 +585,6 @@ with tab2:
                                            min_time=st.session_state['fft_min_time'], 
                                            max_time=st.session_state['fft_max_time'], 
                                            pad_power2=st.session_state['fft_pad_p2'])
-            
-            # FORMAT:[Freq, Amplitude, Phase]
-            # fft_B_complex = st.session_state.fft_B[col_match]
-            # fft_B_arr = np.array([st.session_state.fft_B['freq'], np.abs(fft_B_complex), -np.angle(fft_B_complex)])
-
-            # fft_A_complex = st.session_state.fft_A[col_match]
-            # fft_A_arr = np.array([st.session_state.fft_A['freq'], np.abs(fft_A_complex), -np.angle(fft_A_complex)])
 
             ref_data_B_arr = None; ref_fft_B_arr = None
             ref_data_A_arr = None; ref_fft_A_arr = None
@@ -603,10 +593,7 @@ with tab2:
                 r_scan = st.session_state.ref_scan
                 ref_col = r_scan.A.columns[1]
 
-                # A_ref_peak = -np.min(r_scan.A['time']) + r_scan.A.loc[ r_scan.A[ref_col].idxmax(), 'time'  ] # frame where pixel 0 is 0 ps
-                # B_ref_peak = -np.min(r_scan.B['time']) + r_scan.B.loc[ r_scan.B[ref_col].idxmax(), 'time'  ] 
-                # delta_t_A = A_data_peak - A_ref_peak
-                # delta_t_B = B_data_peak - B_ref_peak
+
 
                 ref_data_B_arr = np.array([r_scan.B['time'] - np.min(r_scan.B['time']) + np.min(scan.B['time']), r_scan.B[ref_col]])
                 ref_data_A_arr = np.array([r_scan.A['time'] - np.min(r_scan.A['time']) + np.min(scan.A['time']), r_scan.A[ref_col]])
@@ -624,13 +611,6 @@ with tab2:
                                            pad_power2=st.session_state['fft_pad_p2'])
                 
                 
-                # FORMAT: [Freq, Amplitude, Phase]
-                # ref_fft_B_complex = st.session_state.fft_ref_B[ref_col]
-                # ref_fft_B_arr = np.array([st.session_state.fft_ref_B['freq'], np.abs(ref_fft_B_complex), -np.angle(ref_fft_B_complex)])
-                
-                # ref_fft_A_complex = st.session_state.fft_ref_A[ref_col]
-                # ref_fft_A_arr = np.array([st.session_state.fft_ref_A['freq'], np.abs(ref_fft_A_complex), -np.angle(ref_fft_A_complex)])
-            
             uirev_val = "fixed" if fixed_zoom else str(selected_tau)
             
             # --- 1D Time & Spectrum Plots ---
