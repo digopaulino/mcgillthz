@@ -5,32 +5,37 @@ cd ..
 
 :: =======================================================================
 :: USER CONFIGURATION
-:: Replace the path below with your exact streamlit executable path.
-:: To find it on Windows:
-:: 1. Open the "Anaconda Prompt"
-:: 2. Activate your environment: conda activate PHYS
-:: 3. Run this command: where streamlit
+:: 1. Set CONDA_BASE_PATH to the folder where Anaconda/Miniconda is installed.
+::    (Common paths: C:\Users\Username\anaconda3 OR C:\Users\Username\miniconda3)
+:: 2. Set ENV_NAME to your environment name.
 :: =======================================================================
-set STREAMLIT_PATH="C:\Users\YourUsername\anaconda3\envs\PHYS\Scripts\streamlit.exe"
+set CONDA_BASE_PATH="C:\Users\Rodrigo\anaconda3"
+set ENV_NAME="PHYS"
 
-:: Run the Streamlit app
-echo Starting 2D THz Analysis GUI...
-%STREAMLIT_PATH% run 2DTempScanGUI.py
+echo Initializing Conda Environment...
+:: This officially hooks Conda into Windows so Math DLLs are found!
+call %CONDA_BASE_PATH%\Scripts\activate.bat %CONDA_BASE_PATH%
 
-:: Check if it failed
+echo Activating %ENV_NAME%...
+call conda activate %ENV_NAME%
+
+echo Starting GUI...
+streamlit run 2DTempScanGUI.py
+
+:: Check if it failed to launch or crashed
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo =======================================================================
-    echo X ERROR: Streamlit failed to launch or the path was not found.
+    echo X ERROR: Streamlit crashed or the environment wasn't found.
     echo =======================================================================
-    echo Please right-click this .bat file, click "Edit", and update the 
-    echo STREAMLIT_PATH variable at the top to match this computer.
-    echo.
-    echo To find the correct path:
-    echo   1. Open the "Anaconda Prompt" from your Windows Start Menu.
-    echo   2. Type: conda activate PHYS
-    echo   3. Type: where streamlit
-    echo =======================================================================
+    echo Please right-click this .bat file, click "Edit", and ensure 
+    echo CONDA_BASE_PATH is pointing to your actual Anaconda installation.
     echo.
     pause
+    exit /b %ERRORLEVEL%
 )
+
+:: Catch-all pause for when the server is stopped normally
+echo.
+echo Streamlit server stopped gracefully.
+pause

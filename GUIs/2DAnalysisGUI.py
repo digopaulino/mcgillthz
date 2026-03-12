@@ -21,7 +21,6 @@ try:
     from mcgillthz.twodim_analysis import THzExp, subtract_leak_NL, window_2d
     from mcgillthz.fft_utils import do_fft_all_taus, do_fft
     from mcgillthz.tds_analysis import get_T_tds
-    # Note: get_T_tds is imported locally in Tab 2 to prevent circular import errors!
 except ImportError as e:
     st.error(f"Import Error: {e}\nEnsure your folder structure matches: parent/mcgillthz/ and parent/GUIs/")
     st.stop()
@@ -112,14 +111,14 @@ def get_plotly_cmap(cmap_name):
     except ValueError:
         mapping = {'hot': 'Hot', 'jet': 'Jet', 'blackbody': 'Blackbody'}
         return mapping.get(cmap_lower, cmap_name)
+    
 
-def add_cs_line(m, b, name, is_vertical=False, x_val=0.0):
-    colors =['cyan', 'lime', 'magenta', 'yellow', 'orange', 'white']
-    color = colors[len(st.session_state.cs_lines) % len(colors)]
+def add_cs_line(m, b, name, color, is_vertical=False, x_val=0.0):
     st.session_state.cs_lines.append({
         'm': m, 'b': b, 'name': name, 'color': color, 
         'is_vertical': is_vertical, 'x_val': x_val
     })
+
 
 # --- INTERACTIVE PLOTLY RENDERERS ---
 def plotly_2x2_grid(scan, title, min_t=None, max_t=None, vmax=0.1):
@@ -172,8 +171,8 @@ def plotly_spectrum(data_B, fft_B, data_A, fft_A, tau_val, uirevision, log_scale
     
     # If Zoom is NOT locked, force the default ranges. Otherwise, let frontend memory handle it!
     if uirevision != "fixed":
-        fig.update_xaxes(range=[ np.min(data_B[0]), np.max(data_B[0]) ], row=1, col=1)
-        fig.update_xaxes(range=[0, max_freq], row=1, col=2)
+        fig.update_xaxes(range=[ np.min(data_B[0]), np.max(data_B[0]) ], row=1, col=1, showgrid=True)
+        fig.update_xaxes(range=[0, max_freq], row=1, col=2, showgrid=True)
         fig.update_yaxes(title_text="FFT Amplitude (a.u.)", type="log" if log_scale_y else "linear", row=1, col=2)
     else:
         fig.update_yaxes(title_text="FFT Amplitude (a.u.)", row=1, col=2)
@@ -181,40 +180,6 @@ def plotly_spectrum(data_B, fft_B, data_A, fft_A, tau_val, uirevision, log_scale
     fig.update_layout(height=450, hovermode="x unified", uirevision=uirevision, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
     return fig
 
-# def plotly_transmission(freq, T_A, T_B, uirevision, max_freq, delta_t_A, delta_t_B):
-#     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
-#     # Real Transmission Amplitude (T[1])
-#     fig.add_trace(go.Scatter(x=freq, y=T_B[1], name='B Amplitude', line=dict(color='blue', dash='solid')), secondary_y=False)
-#     fig.add_trace(go.Scatter(x=freq, y=T_A[1], name='A Amplitude', line=dict(color='red', dash='solid')), secondary_y=False)
-
-#     fig.update_xaxes(title_text="Frequency (THz)")
-#     fig.update_yaxes(title_text="Transmission Amplitude", secondary_y=False)
-
-#     # Phase (T[2])
-#     if delta_t_A != 0 or delta_t_B != 0:
-#         offsetA = 2*np.pi * delta_t_A * T_B[0]
-#         offsetB = 2*np.pi * delta_t_B * T_B[0]
-#         fig.update_yaxes(title_text="Phase - Lin. Offset (rad)", secondary_y=True)
-#     else:
-#         offsetA = np.zeros(len(T_B[0]))
-#         offsetB = np.zeros(len(T_B[0]))
-#         fig.update_yaxes(title_text="Phase (rad)", secondary_y=True)
-
-
-#     fig.add_trace(go.Scatter(x=freq, y=T_B[2]-offsetB, name='B Phase', line=dict(color='blue', dash='dash')), secondary_y=True)
-#     fig.add_trace(go.Scatter(x=freq, y=T_A[2]-offsetA, name='A Phase', line=dict(color='red', dash='dash')), secondary_y=True)
-
-    
-#     # Only force range if zoom is NOT locked
-#     if uirevision != "fixed":
-#         fig.update_xaxes(range=[0, max_freq])
-#         fig.update_yaxes(range=[-0.1, 1.1], secondary_y=False)
-#         if delta_t_A != 0 or delta_t_B != 0:
-#             fig.update_yaxes(range=[-3.14, 3.14], secondary_y=True)
-    
-#     fig.update_layout(title="THz-TDS Transmission", height=400, hovermode="x unified", uirevision=uirevision, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0))
-#     return fig
 
 def plotly_transmission(freq, T_A, T_B, uirevision, max_freq, delta_t_A, delta_t_B):
     # Determine the title for the Phase plot based on the offset condition
@@ -227,18 +192,18 @@ def plotly_transmission(freq, T_A, T_B, uirevision, max_freq, delta_t_A, delta_t
     fig.add_trace(go.Scatter(x=freq, y=T_B[1], name='B Amplitude', line=dict(color='blue', dash='solid')), row=1, col=1)
     fig.add_trace(go.Scatter(x=freq, y=T_A[1], name='A Amplitude', line=dict(color='red', dash='solid')), row=1, col=1)
 
-    fig.update_xaxes(title_text="Frequency (THz)", row=1, col=1)
+    fig.update_xaxes(title_text="Frequency (THz)", row=1, col=1, showgrid=True)
     fig.update_yaxes(title_text="Transmission Amplitude", row=1, col=1)
 
     # --- PLOT 2: Phase (T[2]) ---
     offsetA = 2 * np.pi * delta_t_A * T_A[0]
     offsetB = 2 * np.pi * delta_t_B * T_B[0]
 
-    fig.add_trace(go.Scatter(x=freq, y=(T_B[2] - offsetB), line=dict(color='blue', dash='solid')), row=1, col=2)
-    fig.add_trace(go.Scatter(x=freq, y=(T_A[2] - offsetA), line=dict(color='red', dash='solid')), row=1, col=2)
+    fig.add_trace(go.Scatter(x=freq, y=(T_B[2] - offsetB), line=dict(color='blue', dash='solid'), name=''), row=1, col=2)
+    fig.add_trace(go.Scatter(x=freq, y=(T_A[2] - offsetA), line=dict(color='red', dash='solid'), name=''), row=1, col=2)
 
 
-    fig.update_xaxes(title_text="Frequency (THz)", row=1, col=2)
+    fig.update_xaxes(title_text="Frequency (THz)", row=1, col=2, showgrid=True)
     fig.update_yaxes(title_text=phase_title, row=1, col=2)
     
     # --- ZOOM & RANGE ENFORCEMENT ---
@@ -507,7 +472,7 @@ with tab2:
             st.session_state['tds_fit_range'] = st.slider(
                 "Phase Unwrapping Fit Range (THz)", 
                 min_value=0.0, max_value=6.0, value=(0.4, 1.0), step=0.1,
-                help="Frequency range used to perform linear phase unwrapping in get_T_tds."
+                help="Frequency range used to perform linear phase unwrapping in get_T_tds. Pick range with no absorptions."
             )
 
         st.divider()
@@ -624,11 +589,33 @@ with tab2:
                 try:
                     fit_range = st.session_state.get('tds_fit_range', (0.4, 1.0))
                     
+                    # Tranmission calculation and plot
                     T_A = get_T_tds(ref_data_A_arr, ref_fft_A_arr, data_A_arr, fft_A_arr, freqs_for_fit=list(fit_range))
                     T_B = get_T_tds(ref_data_B_arr, ref_fft_B_arr, data_B_arr, fft_B_arr, freqs_for_fit=list(fit_range))
                     
                     fig_tds = plotly_transmission(st.session_state.fft_A['freq'], T_A, T_B, uirev_val, max_freq_tab2, delta_t_A, delta_t_B)
                     st.plotly_chart(fig_tds, width="stretch", key="tab2_transmission_plot")
+
+                    # Absorption
+                    st.subheader("THz-TDS Absorption", help='Proportional value calculated assuming thick slab.')
+                    fig_abs = go.Figure()
+                    
+                    # Compute alpha: prevent log(0)
+                    eps = 1e-10
+                    alpha_A = -np.log(np.clip(T_A[1], eps, None))
+                    alpha_B = -np.log(np.clip(T_B[1], eps, None))
+                    
+                    fig_abs.add_trace(go.Scatter(x=st.session_state.fft_A['freq'], y=alpha_A, name='THz A', line=dict(color='red')))
+                    fig_abs.add_trace(go.Scatter(x=st.session_state.fft_A['freq'], y=alpha_B, name='THz B', line=dict(color='blue')))
+
+                    fig_abs.update_layout(
+                        xaxis_title="Frequency (THz)", yaxis_title="-ln(|T|)",
+                        height=400, template="plotly_white", margin=dict(l=0, r=0, t=30, b=0),
+                        hovermode="x unified"
+                    )
+                    fig_abs.update_xaxes(range=[0, max_freq_tab2], showgrid=True)
+                    fig_abs.update_yaxes(rangemode="nonnegative")
+                    st.plotly_chart(fig_abs, width="stretch", key="tab2_absorption_plot")
                 except Exception as e:
                     st.error(f"Error calculating THz-TDS Transmission: {e}")
 
@@ -868,13 +855,17 @@ with tab6:
         col_ctrl_cs, col_plot_cs = st.columns([1, 3])
         
         with col_ctrl_cs:
+            # --- NEW: Add the Color Picker widget ---
+            st.subheader("Line Appearance")
+            chosen_color = st.color_picker("Line Color", value="#00FFFF")
+
             st.subheader("Add Standard Lines")
             b1, b2, b3, b4, b5 = st.columns(5)
-            if b1.button("y=0"): add_cs_line(0, 0, "y=0")
-            if b2.button("y=x"): add_cs_line(1, 0, "y=x")
-            if b3.button("y=-x"): add_cs_line(-1, 0, "y=-x")
-            if b4.button("y=2x"): add_cs_line(2, 0, "y=2x")
-            if b5.button("x=0"): add_cs_line(0, 0, "x=0", is_vertical=True, x_val=0.0)
+            if b1.button("y=0"): add_cs_line(0, 0, "y=0", chosen_color)
+            if b2.button("y=x"): add_cs_line(1, 0, "y=x", chosen_color)
+            if b3.button("y=-x"): add_cs_line(-1, 0, "y=-x", chosen_color)
+            if b4.button("y=2x"): add_cs_line(2, 0, "y=2x", chosen_color)
+            if b5.button("x=0"): add_cs_line(0, 0, "x=0", chosen_color, is_vertical=True, x_val=0.0)
             
             st.subheader("Add Custom Line")
             is_vert_custom = st.checkbox("Vertical Line (x = c)", value=False)
@@ -888,9 +879,9 @@ with tab6:
                 
             if st.button("➕ Add Line", width="stretch"):
                 if is_vert_custom:
-                    add_cs_line(0, 0, f"x={line_x}", is_vertical=True, x_val=line_x)
+                    add_cs_line(0, 0, f"x={line_x}", chosen_color, is_vertical=True, x_val=line_x)
                 else:
-                    add_cs_line(line_m, line_b, f"y={line_m}x+{line_b}")
+                    add_cs_line(line_m, line_b, f"y={line_m}x+{line_b}", chosen_color)
 
             st.divider()
             st.subheader("Current Lines")
